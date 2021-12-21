@@ -12,6 +12,10 @@ rescue
   STDERR.puts "Discourse requires Ruby 2.5.2 or up"
   exit 1
 end
+begin
+  # config/application.rb
+config.assets.initialize_on_precompile = false
+end
 
 require File.expand_path('../boot', __FILE__)
 require 'active_record/railtie'
