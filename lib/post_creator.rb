@@ -36,6 +36,7 @@ class PostCreator
   #   hidden_reason_id        - Reason for hiding the post (optional)
   #   skip_validations        - Do not validate any of the content in the post
   #   draft_key               - the key of the draft we are creating (will be deleted on success)
+  #   advance_draft           - Destroy draft after creating post or topic
   #   silent                  - Do not update topic stats and fields like last_post_user_id
   #
   #   When replying to a topic:
@@ -110,39 +111,11 @@ class PostCreator
         return false
       end
 
-      # Make sure none of the users have muted or ignored the creator
-      users = User.where(username_lower: names).pluck(:id, :username).to_h
-
-      User
-        .joins("LEFT JOIN user_options ON user_options.user_id = users.id")
-        .joins("LEFT JOIN muted_users ON muted_users.user_id = users.id AND muted_users.muted_user_id = #{@user.id.to_i}")
-        .joins("LEFT JOIN ignored_users ON ignored_users.user_id = users.id AND ignored_users.ignored_user_id = #{@user.id.to_i}")
-        .where("user_options.user_id IS NOT NULL")
-        .where("
-          (user_options.user_id IN (:user_ids) AND NOT user_options.allow_private_messages) OR
-          muted_users.user_id IN (:user_ids) OR
-          ignored_users.user_id IN (:user_ids)
-        ", user_ids: users.keys)
-        .pluck(:id).each do |m|
-
-        errors.add(:base, I18n.t(:not_accepting_pms, username: users[m]))
-      end
-
-      # Is Allowed PM users list enabled for any recipients?
-      users_with_allowed_pms = allowed_pms_enabled(users).pluck(:id).uniq
-
-      # If any of the users has allowed_pm_users enabled check to see if the creator
-      # is in their list
-      if users_with_allowed_pms.any?
-        users_sender_can_pm = allowed_pms_enabled(users)
-          .where("allowed_pm_users.allowed_pm_user_id" => @user.id.to_i)
-          .pluck(:id).uniq
-
-        # If not in the list add an error
-        users_not_allowed = users_with_allowed_pms - users_sender_can_pm
-        users_not_allowed.each do |id|
-          errors.add(:base, I18n.t(:not_accepting_pms, username: users[id]))
-        end
+      # Make sure none of the users have muted or ignored the creator or prevented
+      # PMs from being sent to them
+      target_users = User.where(username_lower: names.map(&:downcase)).pluck(:id, :username).to_h
+      UserCommScreener.new(acting_user: @user, target_user_ids: target_users.keys).preventing_actor_communication.each do |user_id|
+        errors.add(:base, I18n.t(:not_accepting_pms, username: target_users[user_id]))
       end
 
       return false if errors[:base].present?
@@ -218,7 +191,7 @@ class PostCreator
         delete_owned_bookmarks
         ensure_in_allowed_users if guardian.is_staff?
         unarchive_message if !@opts[:import_mode]
-        DraftSequence.next!(@user, draft_key) if !@opts[:import_mode]
+        DraftSequence.next!(@user, draft_key) if !@opts[:import_mode] && @opts[:advance_draft]
         @post.save_reply_relationships
       end
     end
@@ -486,17 +459,6 @@ class PostCreator
 
   private
 
-  def allowed_pms_enabled(users)
-    User
-      .joins("LEFT JOIN user_options ON user_options.user_id = users.id")
-      .joins("LEFT JOIN allowed_pm_users ON allowed_pm_users.user_id = users.id")
-      .where("
-        user_options.user_id IS NOT NULL AND
-        user_options.user_id IN (:user_ids) AND
-        user_options.enable_allowed_pm_users
-      ", user_ids: users.keys)
-  end
-
   def create_topic
     return if @topic
     begin
@@ -599,15 +561,12 @@ class PostCreator
     @user.create_user_stat if @user.user_stat.nil?
 
     if @user.user_stat.first_post_created_at.nil?
-      @user.user_stat.first_post_created_at = @post.created_at
+      @user.user_stat.update!(first_post_created_at: @post.created_at)
     end
 
-    unless @post.topic.private_message?
-      @user.user_stat.post_count += 1 if @post.post_type == Post.types[:regular] && !@post.is_first_post?
-      @user.user_stat.topic_count += 1 if @post.is_first_post?
+    if !@post.hidden || @post.topic.visible
+      UserStatCountUpdater.increment!(@post)
     end
-
-    @user.user_stat.save!
 
     if !@topic.private_message? && @post.post_type != Post.types[:whisper]
       @user.update(last_posted_at: @post.created_at)
@@ -635,7 +594,7 @@ class PostCreator
 
   def publish
     return if @opts[:import_mode] || @post.post_number == 1
-    @post.publish_change_to_clients! :created
+    @post.publish_change_to_clients! :created, { skip_topic_stats: @post.post_number == 1 }
   end
 
   def extract_links

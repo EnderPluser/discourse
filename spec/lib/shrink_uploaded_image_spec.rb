@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe ShrinkUploadedImage do
+RSpec.describe ShrinkUploadedImage do
   context "when local uploads are enabled" do
     let(:upload) { Fabricate(:image_upload, width: 200, height: 200) }
 

@@ -1,10 +1,7 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
 RSpec.describe ReviewableScore, type: :model do
-
-  context "transitions" do
+  describe "transitions" do
     fab!(:user) { Fabricate(:user, trust_level: 3) }
     fab!(:post) { Fabricate(:post) }
     fab!(:moderator) { Fabricate(:moderator) }
@@ -158,7 +155,7 @@ RSpec.describe ReviewableScore, type: :model do
   end
 
   describe ".user_flag_score" do
-    context "a user with no flags" do
+    context "with a user with no flags" do
       it "returns 1.0 + trust_level" do
         expect(ReviewableScore.user_flag_score(Fabricate.build(:user, trust_level: 2))).to eq(3.0)
         expect(ReviewableScore.user_flag_score(Fabricate.build(:user, trust_level: 3))).to eq(4.0)
@@ -170,7 +167,7 @@ RSpec.describe ReviewableScore, type: :model do
       end
     end
 
-    context "a user with some flags" do
+    context "with a user with some flags" do
       fab!(:user) { Fabricate(:user) }
       let(:user_stat) { user.user_stat }
 
@@ -206,5 +203,4 @@ RSpec.describe ReviewableScore, type: :model do
       expect(ReviewableScore.calculate_score(user, 2, 3)).to eq(flag_score + 2 + 3)
     end
   end
-
 end

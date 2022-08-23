@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe DestroyTask do
+RSpec.describe DestroyTask do
 
   describe 'destroy topics' do
     fab!(:c) { Fabricate(:category_with_definition) }

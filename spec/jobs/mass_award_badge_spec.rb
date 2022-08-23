@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Jobs::MassAwardBadge do
+RSpec.describe Jobs::MassAwardBadge do
   describe '#execute' do
     fab!(:badge) { Fabricate(:badge) }
     fab!(:user) { Fabricate(:user) }

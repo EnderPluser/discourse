@@ -165,7 +165,7 @@ class PostMover
       guardian: Guardian.new(user),
       skip_jobs: true
     )
-    new_post = @post_creator.create
+    new_post = @post_creator.create!
 
     move_email_logs(post, new_post)
 
@@ -178,7 +178,7 @@ class PostMover
 
     # we don't want to keep the old topic's OP bookmarked when we are
     # moving it into a new topic
-    Bookmark.where(post_id: post.id).update_all(post_id: new_post.id)
+    Bookmark.where(bookmarkable: post).update_all(bookmarkable_id: new_post.id)
 
     new_post
   end

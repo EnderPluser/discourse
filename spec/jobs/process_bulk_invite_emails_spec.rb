@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Jobs::ProcessBulkInviteEmails do
+RSpec.describe Jobs::ProcessBulkInviteEmails do
   describe '#execute' do
     it 'processes pending invites' do
       invite = Fabricate(:invite, emailed_status: Invite.emailed_status_types[:bulk_pending])

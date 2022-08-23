@@ -1,16 +1,20 @@
 # frozen_string_literal: true
 
 class CurrentUserSerializer < BasicUserSerializer
+  include UserTagNotificationsMixin
+  include UserSidebarTagsMixin
 
   attributes :name,
              :unread_notifications,
              :unread_private_messages,
              :unread_high_priority_notifications,
+             :all_unread_notifications_count,
              :read_first_notification?,
              :admin?,
              :notification_channel_position,
              :moderator?,
              :staff?,
+             :whisperer?,
              :title,
              :any_posts,
              :enable_quoting,
@@ -28,11 +32,11 @@ class CurrentUserSerializer < BasicUserSerializer
              :redirected_to_top,
              :custom_fields,
              :muted_category_ids,
+             :indirectly_muted_category_ids,
              :regular_category_ids,
              :tracked_category_ids,
              :watched_first_post_category_ids,
              :watched_category_ids,
-             :muted_tag_ids,
              :watched_tags,
              :watching_first_post_tags,
              :tracked_tags,
@@ -41,6 +45,7 @@ class CurrentUserSerializer < BasicUserSerializer
              :dismissed_banner_key,
              :is_anonymous,
              :reviewable_count,
+             :unseen_reviewable_count,
              :read_faq?,
              :automatically_unpin_topics,
              :mailing_list_mode,
@@ -67,7 +72,13 @@ class CurrentUserSerializer < BasicUserSerializer
              :can_review,
              :draft_count,
              :default_calendar,
-             :pending_posts_count
+             :bookmark_auto_delete_preference,
+             :pending_posts_count,
+             :status,
+             :sidebar_category_ids,
+             :likes_notifications_disabled,
+             :grouped_unread_high_priority_notifications,
+             :redesigned_user_menu_enabled
 
   delegate :user_stat, to: :object, private: true
   delegate :any_posts, :draft_count, :pending_posts_count, :read_faq?, to: :user_stat
@@ -141,6 +152,10 @@ class CurrentUserSerializer < BasicUserSerializer
     object.user_option.default_calendar
   end
 
+  def bookmark_auto_delete_preference
+    object.user_option.bookmark_auto_delete_preference
+  end
+
   def can_send_private_email_messages
     scope.can_send_private_messages_to_email?
   end
@@ -202,6 +217,10 @@ class CurrentUserSerializer < BasicUserSerializer
     categories_with_notification_level(:muted)
   end
 
+  def indirectly_muted_category_ids
+    CategoryUser.indirectly_muted_category_ids(object)
+  end
+
   def regular_category_ids
     categories_with_notification_level(:regular)
   end
@@ -216,32 +235,6 @@ class CurrentUserSerializer < BasicUserSerializer
 
   def watched_first_post_category_ids
     categories_with_notification_level(:watching_first_post)
-  end
-
-  # this is a weird outlier that is used for topic tracking state which
-  # needs the actual ids, which is why it is duplicated with muted_tags
-  def muted_tag_ids
-    TagUser.lookup(object, :muted).pluck(:tag_id)
-  end
-
-  def muted_tags
-    tags_with_notification_level(:muted)
-  end
-
-  def tracked_tags
-    tags_with_notification_level(:tracking)
-  end
-
-  def watching_first_post_tags
-    tags_with_notification_level(:watching_first_post)
-  end
-
-  def watched_tags
-    tags_with_notification_level(:watching)
-  end
-
-  def regular_tags
-    tags_with_notification_level(:regular)
   end
 
   def ignored_users
@@ -268,10 +261,6 @@ class CurrentUserSerializer < BasicUserSerializer
 
   def is_anonymous
     object.anonymous?
-  end
-
-  def reviewable_count
-    Reviewable.list_for(object).count
   end
 
   def can_review
@@ -316,5 +305,44 @@ class CurrentUserSerializer < BasicUserSerializer
 
   def include_has_topic_draft?
     Draft.has_topic_draft(object)
+  end
+
+  def sidebar_category_ids
+    object.sidebar_categories_ids
+  end
+
+  def include_sidebar_category_ids?
+    SiteSetting.enable_experimental_sidebar_hamburger
+  end
+
+  def include_status?
+    SiteSetting.enable_user_status && object.has_status?
+  end
+
+  def status
+    UserStatusSerializer.new(object.user_status, root: false)
+  end
+
+  def redesigned_user_menu_enabled
+    if defined?(@redesigned_user_menu_enabled)
+      return @redesigned_user_menu_enabled
+    end
+    @redesigned_user_menu_enabled = object.redesigned_user_menu_enabled?
+  end
+
+  def likes_notifications_disabled
+    object.user_option&.likes_notifications_disabled?
+  end
+
+  def include_all_unread_notifications_count?
+    redesigned_user_menu_enabled
+  end
+
+  def include_grouped_unread_high_priority_notifications?
+    redesigned_user_menu_enabled
+  end
+
+  def include_unseen_reviewable_count?
+    redesigned_user_menu_enabled
   end
 end

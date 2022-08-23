@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
 RSpec.describe RobotsTxtController do
   describe '#builder' do
     it "returns json information for building a robots.txt" do
@@ -25,8 +23,7 @@ RSpec.describe RobotsTxtController do
   end
 
   describe '#index' do
-
-    context "header for when the content is overridden" do
+    context "when the content is overridden" do
       it "is not prepended if there are no overrides" do
         sign_in(Fabricate(:admin))
         get '/robots.txt'
@@ -47,7 +44,7 @@ RSpec.describe RobotsTxtController do
       end
     end
 
-    context 'subfolder' do
+    context 'with subfolder' do
       it 'prefixes the rules with the directory' do
         set_subfolder "/forum"
 
@@ -56,8 +53,7 @@ RSpec.describe RobotsTxtController do
       end
     end
 
-    context 'allow_index_in_robots_txt is true' do
-
+    context 'when allow_index_in_robots_txt is true' do
       def expect_allowed_and_disallowed_sections(allow_index, disallow_index)
         expect(allow_index).to be_present
         expect(disallow_index).to be_present
@@ -131,6 +127,57 @@ RSpec.describe RobotsTxtController do
       get '/robots.txt'
       expect(response.status).to eq(200)
       expect(response.body).to eq(SiteSetting.overridden_robots_txt)
+    end
+
+    describe 'sitemap' do
+      let(:sitemap_line) { "Sitemap: #{Discourse.base_protocol}://#{Discourse.current_hostname}/sitemap.xml" }
+
+      it 'include sitemap location when enabled' do
+        SiteSetting.enable_sitemap = true
+        SiteSetting.login_required = false
+
+        get '/robots.txt'
+
+        expect(response.body).to include(sitemap_line)
+      end
+
+      it "doesn't include sitemap location when disabled" do
+        SiteSetting.enable_sitemap = false
+        SiteSetting.login_required = false
+
+        get '/robots.txt'
+
+        expect(response.body).not_to include(sitemap_line)
+      end
+
+      it "doesn't include sitemap location when site has login_required enabled" do
+        SiteSetting.enable_sitemap = true
+        SiteSetting.login_required = true
+
+        get '/robots.txt'
+
+        expect(response.body).not_to include(sitemap_line)
+      end
+    end
+
+    describe 'plugins' do
+      let(:event_handler) do
+        Proc.new { |robots_info| robots_info[:agents] << { name: 'Test', disallow: ['/test/'] } }
+      end
+
+      before do
+        DiscourseEvent.on(:robots_info, &event_handler)
+      end
+
+      after do
+        DiscourseEvent.off(:robots_info, &event_handler)
+      end
+
+      it 'can add to robots.txt' do
+        get '/robots.txt'
+
+        expect(response.parsed_body).to include("User-agent: Test\nDisallow: /test/")
+      end
     end
   end
 end

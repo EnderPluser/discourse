@@ -14,7 +14,7 @@ module ImportScripts::PhpBB3
       @database = database
       @smiley_processor = smiley_processor
       @he = HTMLEntities.new
-      @use_xml_to_markdown = phpbb_config[:phpbb_version].start_with?('3.2')
+      @use_xml_to_markdown = phpbb_config[:phpbb_version].start_with?('3.2') || phpbb_config[:phpbb_version].start_with?('3.3')
 
       @settings = settings
       @new_site_prefix = settings.new_site_prefix
@@ -59,7 +59,7 @@ module ImportScripts::PhpBB3
         process_code(text)
         fix_markdown(text)
         process_attachments(text, attachments) if attachments.present?
-
+        process_videos(text)
         text
       end
     end
@@ -78,10 +78,10 @@ module ImportScripts::PhpBB3
       # Many phpbb bbcode tags have a hash attached to them. Examples:
       #   [url=https&#58;//google&#46;com:1qh1i7ky]click here[/url:1qh1i7ky]
       #   [quote=&quot;cybereality&quot;:b0wtlzex]Some text.[/quote:b0wtlzex]
-      text.gsub!(/:(?:\w{8})\]/, ']')
+      text.gsub!(/:(?:\w{5,8})\]/, ']')
 
       # remove color tags
-      text.gsub!(/\[\/?color(=#[a-z0-9]*)?\]/i, "")
+      text.gsub!(/\[\/?color(=#?[a-z0-9]*)?\]/i, "")
     end
 
     def bbcode_to_md(text)
@@ -195,6 +195,12 @@ module ImportScripts::PhpBB3
     def fix_markdown(text)
       text.gsub!(/(\n*\[\/?quote.*?\]\n*)/mi) { |q| "\n#{q.strip}\n" }
       text.gsub!(/^!\[[^\]]*\]\([^\]]*\)$/i) { |img| "\n#{img.strip}\n" } # space out images single on line
+      text
+    end
+
+    def process_videos(text)
+      # [YOUTUBE]<id>[/YOUTUBE]
+      text.gsub(/\[youtube\](.+?)\[\/youtube\]/i) { "\nhttps://www.youtube.com/watch?v=#{$1}\n" }
       text
     end
   end

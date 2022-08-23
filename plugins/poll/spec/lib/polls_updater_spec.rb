@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe DiscoursePoll::PollsUpdater do
+RSpec.describe DiscoursePoll::PollsUpdater do
 
   def update(post, polls)
     DiscoursePoll::PollsUpdater.update(post, polls)

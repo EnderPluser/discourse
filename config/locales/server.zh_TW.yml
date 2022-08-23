@@ -165,7 +165,6 @@ zh_TW:
       s3_bucket_reused: "不能把同一個 Amazon bucket 同時使用 ‘s3_upload_bucket’ 及 ‘s3_backup_bucket’。請選擇不同的 bucket 或指定將每個 bucket 設定不同的路徑。"
     conflicting_google_user_id: '此 Google 帳戶 ID 出於安全原因已更改，請聯絡管理人員並將其<br><a href="https://meta.discourse.org/t/76575">指向 https://meta.discourse.org/t/76575 </a>'
   invite:
-    user_exists: "無需邀請 <b>%{email}</b>，他 <a href='%{base_path}/u/%{username}/summary'>已經有帳號了</a>！"
     confirm_email: "<p>快完成了！我們發送了一封啟用帳號郵件到你的信箱。請按照信件中的步驟來啟用你的帳號。</p><p>如果你沒有收到郵件，請檢查你的垃圾郵件\\b匣。"
     disabled_errors:
       invalid_access: "你不允許查看所請求的資源。"
@@ -233,7 +232,6 @@ zh_TW:
   links_require_trust: "抱歉，您不能在貼文中插入連結"
   too_many_links:
     other: "抱歉，新使用者只能在貼文中放置 %{count} 個連結。"
-  contains_blocked_word: "您的貼文包含被禁用的文字：%{word}"
   spamming_host: "抱歉，你不能張貼該網站之連結。"
   user_is_suspended: "被停權的使用者無法張貼貼文。"
   topic_not_found: "出現問題。也許這個話題被關閉或刪除。"
@@ -649,12 +647,6 @@ zh_TW:
       title: "讚"
       description: "給此貼文按讚"
       short_description: "喜歡這篇貼文"
-  user_activity:
-    no_bookmarks:
-      self: "您沒有加入書籤的貼文，書籤能夠讓您快速的找到特定貼文。"
-      others: "沒有書籤。"
-    no_drafts:
-      self: "您沒有任何草稿，開始撰寫任何話題的回應，即會被自動儲存為新的草稿。"
   topic_flag_types:
     spam:
       title: "垃圾內容"
@@ -1097,7 +1089,6 @@ zh_TW:
     min_personal_message_title_length: "訊息標題的字元數下限"
     max_emojis_in_title: "話題標題可含有的表情符號上限"
     min_search_term_length: "搜尋條件允許的最小文字數"
-    search_tokenize_chinese_japanese_korean: "在非中/日/韓語站點強制切割中/日/韓語搜索分詞"
     search_prefer_recent_posts: "如果搜索大型論壇較慢，這個選項將優先嘗試最新的貼文"
     search_recent_posts_size: "索引多少最新的主題"
     log_search_queries: "登入使用者進行搜尋查詢"
@@ -1114,7 +1105,6 @@ zh_TW:
     site_description: "用一句話描述這個網站，用於 meta description 標籤。"
     short_site_description: "簡短描述，用於網頁標題。"
     crawl_images: "允許從第三方 URL 取得圖片，來加入寬和高的數值"
-    download_remote_images_to_local: "下載外部鏈接的圖片到本機；以防圖片損壞。"
     download_remote_images_threshold: "可用來下載外部圖片到本機最少的空間（百分比）"
     disabled_image_download_domains: "在此列表的網域名稱的遠端圖片將不會進行下載，用 | 分割多個域名"
     editing_grace_period: "在 (n) 秒之內，對貼文的編輯不生成貼文歷史。"
@@ -1134,7 +1124,6 @@ zh_TW:
     show_pinned_excerpt_mobile: "在行動版置頂主題顯示摘要。"
     show_pinned_excerpt_desktop: "在桌面版置頂主題顯示摘要。"
     post_onebox_maxlength: "展開連結預覽後的 Discourse 貼文最大字數限制。"
-    blocked_onebox_domains: "不會展開成連結預覽的網域列表。"
     allowed_inline_onebox_domains: "如果連結未包含 title，會被展開成連結預覽的網域白名單。"
     max_oneboxes_per_post: "貼文中允許的連結預覽數量上限。"
     logo: "網站左上角的Logo圖片，圖片高為120、寬高比大於3：1的寬矩形比例。 如果沒有設定 Logo，將顯示網站標題。"
@@ -1146,7 +1135,6 @@ zh_TW:
     favicon: "您網頁的圖示（favicon），請參閱<a href='https://en.wikipedia.org/wiki/Favicon' target='_blank'>https://en.wikipedia.org/wiki/Favicon</a>。 要在CDN上正常工作，favicon 副檔名必須為 .png，圖示將調整為32x32。如果留空，將使用large_icon。"
     apple_touch_icon: "Icon 用於Apple觸控裝置的圖示，將自動調整為180x180。 如果留空，將使用large_icon。"
     opengraph_image: "預設opengraph image，在頁面沒有其他合適圖像時使用。 如果留空，將使用large_icon。"
-    twitter_summary_large_image: "Twitter卡 摘要大尺寸圖片卡（寬度至少應為280，高度至少為150）。 如果留空，則使用opengraph_image以生成卡片（metadata）。"
     notification_email: "這個表格：被用於發送所有重要系統郵件的郵箱地址。指定的域名必須正確設置 SPF、DKIM 和反向 PTR 記錄以發送郵件。"
     email_custom_headers: "自定義的電子郵件標題的管道分隔列表"
     email_subject: "客製化自訂郵件標題格式，請參閱 <a href='https://meta.discourse.org/t/customize-subject-format-for-standard-emails/20801' target='_blank'>https://meta.discourse.org/t/customize-subject-format-for-standard-emails/20801</a>"
@@ -1155,9 +1143,7 @@ zh_TW:
     summary_percent_filter: "當使用者點擊 \"此話題的摘要\"，顯示前面多少 % 的貼文"
     summary_max_results: "“概括主題”將顯示最大貼文數量"
     enable_system_message_replies: "即使個人訊息功能未開啟，允許使用者回覆系統傳送的訊息。"
-    enable_long_polling: "啟用消息匯流排使通知功能可以使用長輪詢（long polling）"
     long_polling_base_url: "長輪詢的基本 URL（當用 CDN 分發動態內容，請設置此至原始拉取地址）例如：http://origin.site.com"
-    long_polling_interval: "當沒有數據向客戶端發送時伺服器端應等待的時間（僅對已登錄使用者有效）"
     polling_interval: "當不再長輪詢時，已登錄的客戶端應該多久輪詢一次（單位 毫秒）"
     anon_polling_interval: "匿名使用者使用者端輪詢時間間隔（單位 毫秒）"
     background_polling_interval: "客戶端輪詢的間隔，以毫秒計（當視窗在後台時）"
@@ -1201,7 +1187,6 @@ zh_TW:
     send_tl1_welcome_message: "向新使用者（信任級別1）發送歡迎消息。"
     suppress_reply_directly_below: "當貼文只有一個回覆時，不顯示貼文的回覆數量。"
     suppress_reply_directly_above: "當貼文只有一個回覆時，不顯示回覆到該帖的回覆。"
-    remove_full_quote: "直接引用將自動刪除內容的全部引號"
     suppress_reply_when_quoting: "當貼文引用回覆時，不顯示可展開的回覆到某帖的標記。"
     max_reply_history: "擴展回覆到某帖時顯示的最大回覆數量"
     topics_per_period_in_top_summary: "預設推薦話題的顯示數量"
@@ -1216,7 +1201,6 @@ zh_TW:
     enable_whispers: "允許工作人員在主題中私密交流。"
     blocked_email_domains: "用管道符“|”分隔的郵箱域名黑名單列表，其中的域名將不能用來註冊賬戶，例如：mailinator.com|trashmail.net"
     allowed_email_domains: "用管道符“|”分隔的電子郵箱域名的列表，使用者必須使用這些郵箱域名註冊。警告：使用者使用不包含在這個列表裡的郵箱域名，將無法成功註冊。"
-    hide_email_address_taken: "註冊或忘記密碼時，不提示使用者帳號、Email 已存在"
     log_out_strict: "登出時，登出使用者所有設備上的所有時段"
     version_checks: "當 Discourse 有推新的版本需要更新時，顯示在 <a href='%{base_path}/admin' target='_blank'>/admin/</a>Dashboard 上以提示管理員"
     new_version_emails: "當新版本發佈時，將會發送一封新的 EMail 至 contact_email 設定的位址"
@@ -1299,7 +1283,6 @@ zh_TW:
     external_system_avatars_enabled: "使用外部系統頭像服務。"
     external_system_avatars_url: "外部系統頭像服務的 URL 地址。可選參數是 {username} {first_letter} {color} {size}"
     restrict_letter_avatar_colors: "設定分類顏色的十六進制色彩值列表。"
-    selectable_avatars_enabled: "強制使用者從列表中選擇一個大頭貼。"
     selectable_avatars: "使用者可選擇的頭像列表。"
     allow_all_attachments_for_group_messages: "允許群組消息中包含任何郵件附件。"
     png_to_jpg_quality: "轉換後的JPG文件品質（1是最低品質，99是最佳品質，100是禁用）。"
@@ -1562,6 +1545,7 @@ zh_TW:
     default_categories_tracking: "分類列表預設追蹤。"
     default_categories_muted: "分類列表預設不顯示。"
     default_categories_watching_first_post: "預設監看這些分類中每個新主題的第一貼"
+    default_categories_normal: "類別沒有預設靜音的清單，當`預設所有類別靜音`網站設定啟用時很有用。"
     default_text_size: "預設選定的文字大小"
     default_title_count_mode: "頁面標題計數器的預設模式"
     retain_web_hook_events_period_days: "保留Web hook事件記錄的天數。"
@@ -1580,7 +1564,6 @@ zh_TW:
     tags_sort_alphabetically: "按照字母順序顯示標籤。預設按流行度顯示。"
     tags_listed_by_group: "按<a href='%{base_path}/tags' target='_blank'>標籤頁面</a>上的標籤群組列出標籤（Tags）。"
     tag_style: "標籤的視覺樣式。"
-    allow_staff_to_tag_pms: "允許工作人員（具有管理員權限）標記任何的個人訊息"
     min_trust_level_to_tag_topics: "給主題加標籤的最小信任等級"
     suppress_overlapping_tags_in_list: "如果標籤匹配了主題標題中的詞，不顯示該標籤"
     force_lowercase_tags: "強制所有新標籤完全小寫"
@@ -1768,11 +1751,6 @@ zh_TW:
       fixed_primary_email: "為暫存使用者（staged user）修復主要電子郵件"
       same_ip_address: "與其他使用者使用相同的IP地址（%{ip_address}）"
       inactive_user: "不活躍使用者"
-  reviewables_reminder:
-    submitted:
-      other: "項目是在幾個小時前提交的。（查看更多資訊：%{base_path}/review）。"
-    subject_template:
-      other: "%{count}項目需要被審核"
   unsubscribe_mailer:
     title: "取消訂閱 Mailer"
     subject_template: "確認你不想要收到%{site_title}的電子郵件更新"
@@ -2590,10 +2568,10 @@ zh_TW:
     suspicious_login:
       title: "新登入提醒"
       subject_template: "[%{site_name}] 新登入來自%{location}"
-      text_body_template: "您好，\n\n我們注意到您從未知的第三方設備登入。\n\n這是你嗎？ \n- 位置：%{location}（%{client_ip}） \n- 瀏覽器：%{browser} \n- 設備：%{device} - %{os}\n\n如果這是你，太棒了！你不需要做任何其他事情。如果這不是您，請[查看帳號個人檔案](%{base_url}/my /preferences/account)，並考慮更改您的密碼。\n"
     post_approved:
       title: "你的貼文已通過"
   page_not_found:
+    page_title: "找不到頁面"
     title: "抱歉！這個頁面不存在或者是私密的。"
     popular_topics: "熱門"
     recent_topics: "最近"
@@ -3037,87 +3015,28 @@ zh_TW:
       message: "<p>我們已重發啟用信件至 <b>%{email}</b>"
   safe_mode:
     title: "進入安全模式"
-    description: "安全模式讓你的網站不載入套件或站點自定義設定。"
-    no_customizations: "停用當前佈景主題"
-    only_official: "停用非官方套件"
+    no_unofficial_plugins: "停用非官方套件"
     no_plugins: "停用所有套件"
     enter: "進入安全模式"
     must_select: "您必須至少選擇一個選項才能進入安全模式。"
   wizard:
     title: "Discourse 安裝"
     step:
-      locale:
-        title: "歡迎來到 Discourse！"
-        fields:
-          default_locale:
-            description: "你的社群主要使用什麼語言？"
-      forum_title:
-        title: "名字"
-        description: "名字就像遠方可見的路標一樣，訪客“首先”將看到這個社群的名字。你起的名字和標題怎樣描述了你的社群？"
+      introduction:
         fields:
           title:
-            label: "你社群的名字"
             placeholder: "小明的論壇"
           site_description:
             placeholder: "小明和他的朋友討論酷東西的論壇"
-          short_site_description:
-            placeholder: "最佳社群"
-      introduction:
-        title: "介紹"
-        disabled: "<p>我們找不到標題為「%{topic_title}」的討論話題。 </p><ul><li>如果您更改了標題，請編輯該討論話題以修改您網站的描述內容。 </li><li>如果您已刪除此討論話題，請建立另一個討論話題為「%{topic_title}」作為標題。第一篇貼文的內容是您網站的描述文字。 </li></ul>"
-        fields:
-          welcome:
-            label: "歡迎主題"
-            description: "<p>你會如何在一分鐘內向陌生人描述你的社群？</p> <ul> <li>誰會對這些討論感興趣？</li> <li>我能獲得什麼？</li> <li>為什麼我應該參與？</li> </ul> <p>你的歡迎主題，是新訪客將首先看到的訊息。請將它視為<b>一段</b>「電梯宣傳」或者「任務說明」。</p>"
-            one_paragraph: "請限制你的歡迎消息至一段話。"
       privacy:
-        title: "訪問"
-        description: "<p>你的社群對是否對大眾公開，或僅限於會員使用、邀請制或須審核加入？如果你願意，你可以先在私密模式下準備，稍後再將其設為公開。</p>"
         fields:
-          privacy:
-            choices:
-              open:
-                label: "公開"
-                description: "任何人都可以訪問此社群"
-              restricted:
-                label: "私密"
-                description: "使用者必須登入後才能訪問此社群"
-          privacy_options:
-            description: "新使用者如何註冊帳號？"
-            choices:
-              open:
-                label: "使用者可以自行註冊"
-              invite_only:
-                label: "使用者必須先受信任的使用者或管理員的邀請才能註冊。"
-              must_approve:
-                label: "使用者可以自行註冊，但必須得到管理員的批准。"
-      contact:
-        title: "聯繫"
-        fields:
-          contact_email:
-            label: "郵件"
-            placeholder: "name@example.com"
-            description: "社群的負責人或小組的郵件地址。將用來接收關於未處理標記和安全更新的緊急通知，並顯示在<a href='%{base_path}/about' target='_blank'>關於頁面</a>上作為緊急聯繫的方式。"
-          contact_url:
-            label: "網頁"
-            placeholder: "https://www.example.com/contact-us"
-            description: "你或者你的組織平時用於聯絡的網頁。將被顯示在<a href='%{base_path}/about' target='_blank'>關於頁面</a>中。"
-          site_contact:
-            label: "自動消息"
-            description: "所有自動發送的消息將以該使用者的名義發送，比如投訴警告、備份完成通知。"
-      corporate:
-        title: "組織"
-        description: "這個資訊將顯示您的<a href='%{base_path}/tos' target='blank'>服務條款</a>，你可以在管理員分類中編輯這些討論話題。如果你沒有公司，你可以跳過這個步驟。"
-        fields:
-          company_name:
-            label: "公司名稱"
-            placeholder: "組織範例"
-          governing_law:
-            label: "適用於法律"
-            placeholder: "加州法律"
-          city_for_disputes:
-            label: "爭議"
-            placeholder: "舊金山，加洲（California）"
+          login_required:
+            placeholder: "私密"
+            extra_description: "使用者必須登入後才能訪問此社群"
+          must_approve_users:
+            placeholder: "需要審核"
+      ready:
+        title: "你的 Discourse 已經準備就緒！"
       styling:
         fields:
           styling_preview:
@@ -3134,28 +3053,34 @@ zh_TW:
                 label: "分類和最新話題"
               categories_and_top_topics:
                 label: "分類與熱門話題"
-              categories_boxes:
-                label: "分類框"
-              categories_boxes_with_topics:
-                label: "分類框與討論話題"
-      logos:
-        title: "標誌"
+      branding:
         fields:
           logo:
             label: "主要標誌"
-            description: "網站左上角的 Logo 圖片使用高120且寬高比大於3：1的寬矩形圖像"
           logo_small:
             label: "正方形 Logo"
-            description: "Logo 的正方形版本，當向下滾動時，在瀏覽器中以及在社交平台上共享時，Logo 會顯示在網站的左上角，理想情況下圖片需大於512x512。"
-      icons:
-        title: "表徵圖"
-        fields:
           favicon:
             label: "瀏覽器的 Icon"
-            description: "在瀏覽器中代表您的網站 Icon 圖像，建議上傳小尺寸，圖片副檔名最好是.PNG或.JPG，預設值為使用正方形 Logo。"
           large_icon:
             label: "大表徵圖"
-            description: "用於在現代設備上代表您的網站 Icon 圖像，建議上傳大尺寸，理想情況下大於512×512，預設值為使用正方形 Logo。"
+      corporate:
+        fields:
+          company_name:
+            label: "公司名稱"
+            placeholder: "組織範例"
+          governing_law:
+            label: "適用於法律"
+            placeholder: "加州法律"
+          contact_url:
+            label: "網頁"
+            placeholder: "https://www.example.com/contact-us"
+            description: "你或者你的組織平時用於聯絡的網頁。將被顯示在<a href='%{base_path}/about' target='_blank'>關於頁面</a>中。"
+          city_for_disputes:
+            label: "爭議"
+            placeholder: "舊金山，加洲（California）"
+          site_contact:
+            label: "自動消息"
+            description: "所有自動發送的消息將以該使用者的名義發送，比如投訴警告、備份完成通知。"
       invites:
         title: "邀請工作人員"
         description: "您就快完成啦！讓我們邀請一些人來幫您<a href='https://blog.discourse.org/2014/08/building-a-discourse-community/' target='blank'>創建一些種子討論話題</a>，好讓您的社群朋友產生興趣並開始回覆。"

@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe WebHook do
+RSpec.describe WebHook do
   it { is_expected.to validate_presence_of :payload_url }
   it { is_expected.to validate_presence_of :content_type }
   it { is_expected.to validate_presence_of :last_delivery_status }
@@ -36,7 +34,7 @@ describe WebHook do
     end
   end
 
-  context 'web hooks' do
+  context 'with web hooks' do
     fab!(:post_hook) { Fabricate(:web_hook, payload_url: " https://example.com ") }
     fab!(:topic_hook) { Fabricate(:topic_web_hook) }
 
@@ -109,7 +107,7 @@ describe WebHook do
         expect(job_args["payload"]).to eq(payload)
       end
 
-      context 'includes wildcard hooks' do
+      context 'when including wildcard hooks' do
         fab!(:wildcard_hook) { Fabricate(:wildcard_web_hook) }
 
         describe '#enqueue_hooks' do
@@ -137,6 +135,7 @@ describe WebHook do
     let(:topic) { Fabricate(:topic, user: user) }
     let(:post) { Fabricate(:post, topic: topic, user: user) }
     let(:topic_web_hook) { Fabricate(:topic_web_hook) }
+    let(:tag) { Fabricate(:tag) }
 
     before do
       topic_web_hook
@@ -208,6 +207,21 @@ describe WebHook do
       payload = JSON.parse(job_args["payload"])
       expect(payload["id"]).to eq(topic_id)
       expect(payload["category_id"]).to eq(category.id)
+
+      expect do
+        successfully_saved_post_and_topic = PostRevisor.new(post, post.topic).revise!(
+          post.user,
+          { tags: [tag.name] },
+          { skip_validations: true },
+        )
+      end.to change { Jobs::EmitWebHookEvent.jobs.length }.by(1)
+
+      job_args = Jobs::EmitWebHookEvent.jobs.last["args"].first
+
+      expect(job_args["event_name"]).to eq("topic_edited")
+      payload = JSON.parse(job_args["payload"])
+      expect(payload["id"]).to eq(topic_id)
+      expect(payload["tags"]).to contain_exactly(tag.name)
     end
 
     describe 'when topic has been deleted' do
@@ -574,24 +588,74 @@ describe WebHook do
       expect(payload["user_id"]).to eq(user.id)
     end
 
-    it 'should enqueue hooks for user likes in a group' do
-      group = Fabricate(:group)
-      Fabricate(:like_web_hook, groups: [group])
-      group_user = Fabricate(:group_user, group: group, user: user)
-      poster = Fabricate(:user)
-      post = Fabricate(:post, user: poster)
-      like = Fabricate(:post_action, post: post, user: user, post_action_type_id: PostActionType.types[:like])
-      now = Time.now
-      freeze_time now
+    context 'with user promoted hooks' do
+      fab!(:user_promoted_web_hook) { Fabricate(:user_promoted_web_hook) }
+      fab!(:another_user) { Fabricate(:user, trust_level: 2) }
 
-      DiscourseEvent.trigger(:like_created, like)
+      it 'should pass the user to the webhook job when a user is promoted' do
+        another_user.change_trust_level!(another_user.trust_level + 1)
 
-      job_args = Jobs::EmitWebHookEvent.jobs.last["args"].first
-      expect(job_args["event_name"]).to eq("post_liked")
-      expect(job_args["group_ids"]).to eq([group.id])
-      payload = JSON.parse(job_args["payload"])
-      expect(payload["post"]["id"]).to eq(post.id)
-      expect(payload["user"]["id"]).to eq(user.id)
+        job_args = Jobs::EmitWebHookEvent.jobs.last["args"].first
+        expect(job_args["event_name"]).to eq("user_promoted")
+        payload = JSON.parse(job_args["payload"])
+        expect(payload["id"]).to eq(another_user.id)
+      end
+
+      it 'shouldn’t trigger when the user is demoted' do
+        expect {
+          another_user.change_trust_level!(another_user.trust_level - 1)
+        }.not_to change { Jobs::EmitWebHookEvent.jobs.length }
+      end
+    end
+
+    context 'with like created hooks' do
+      fab!(:like_web_hook) { Fabricate(:like_web_hook) }
+      fab!(:another_user) { Fabricate(:user) }
+
+      it 'should pass the group id to the emit webhook job' do
+        group = Fabricate(:group)
+        group_user = Fabricate(:group_user, group: group, user: user)
+        post = Fabricate(:post, user: another_user)
+        like = Fabricate(:post_action, post: post, user: user, post_action_type_id: PostActionType.types[:like])
+        now = Time.now
+        freeze_time now
+
+        DiscourseEvent.trigger(:like_created, like)
+
+        assert_hook_was_queued_with(post, user, group_ids: [group.id])
+      end
+
+      it 'should pass the category id to the emit webhook job' do
+        category = Fabricate(:category)
+        topic.update!(category: category)
+        like = Fabricate(:post_action, post: post, user: another_user, post_action_type_id: PostActionType.types[:like])
+
+        DiscourseEvent.trigger(:like_created, like)
+
+        assert_hook_was_queued_with(post, another_user, category_id: category.id)
+      end
+
+      it 'should pass the tag id to the emit webhook job' do
+        tag = Fabricate(:tag)
+        topic.update!(tags: [tag])
+        like = Fabricate(:post_action, post: post, user: another_user, post_action_type_id: PostActionType.types[:like])
+
+        DiscourseEvent.trigger(:like_created, like)
+
+        assert_hook_was_queued_with(post, another_user, tag_ids: [tag.id])
+      end
+
+      def assert_hook_was_queued_with(post, user, group_ids: nil, category_id: nil, tag_ids: nil)
+        job_args = Jobs::EmitWebHookEvent.jobs.last["args"].first
+        expect(job_args["event_name"]).to eq("post_liked")
+        payload = JSON.parse(job_args["payload"])
+        expect(payload["post"]["id"]).to eq(post.id)
+        expect(payload["user"]["id"]).to eq(user.id)
+
+        expect(job_args["category_id"]).to eq(category_id) if category_id
+        expect(job_args["group_ids"]).to contain_exactly(*group_ids) if group_ids
+        expect(job_args["tag_ids"]).to contain_exactly(*tag_ids) if tag_ids
+      end
     end
   end
 end

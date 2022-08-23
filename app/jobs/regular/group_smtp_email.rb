@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_dependency 'email/sender'
-
 module Jobs
   class GroupSmtpEmail < ::Jobs::Base
     include Skippable
@@ -42,9 +40,9 @@ module Jobs
         return skip(email, post, recipient_user, :group_smtp_topic_deleted)
       end
 
-      cc_addresses = args[:cc_emails].map do |cc|
-        cc.match(EmailValidator.email_regex) ? cc : nil
-      end.compact
+      cc_addresses = args[:cc_emails].filter do |address|
+        EmailAddressValidator.valid_value?(address)
+      end
 
       # There is a rare race condition causing the Imap::Sync class to create
       # an incoming email and associated post/topic, which then kicks off

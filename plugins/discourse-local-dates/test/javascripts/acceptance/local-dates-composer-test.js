@@ -1,6 +1,11 @@
-import { acceptance, queryAll } from "discourse/tests/helpers/qunit-helpers";
+import {
+  acceptance,
+  query,
+  queryAll,
+} from "discourse/tests/helpers/qunit-helpers";
 import { test } from "qunit";
 import { click, fillIn, visit } from "@ember/test-helpers";
+import selectKit from "discourse/tests/helpers/select-kit-helper";
 
 acceptance("Local Dates - composer", function (needs) {
   needs.user();
@@ -8,9 +13,9 @@ acceptance("Local Dates - composer", function (needs) {
 
   test("composer bbcode", async function (assert) {
     const getAttr = (attr) => {
-      return queryAll(
+      return query(
         ".d-editor-preview .discourse-local-date.cooked-date"
-      ).attr(`data-${attr}`);
+      ).getAttribute(`data-${attr}`);
     };
 
     await visit("/");
@@ -60,5 +65,61 @@ acceptance("Local Dates - composer", function (needs) {
       "it has the correct date"
     );
     assert.notOk(getAttr("time"), "it doesn’t have time");
+  });
+
+  test("date modal", async function (assert) {
+    await visit("/");
+    await click("#create-topic");
+    await click(".d-editor-button-bar .local-dates");
+
+    const timezoneChooser = selectKit(".timezone-input");
+    await timezoneChooser.expand();
+    await timezoneChooser.selectRowByValue("Asia/Macau");
+
+    assert.ok(
+      query(".preview .discourse-local-date").textContent.includes("Macau"),
+      "it outputs a preview date in selected timezone"
+    );
+  });
+
+  test("date modal - controls", async function (assert) {
+    await visit("/");
+    await click("#create-topic");
+    await click(".d-editor-button-bar .local-dates");
+
+    await click('.pika-table td[data-day="5"] > .pika-button');
+
+    assert.ok(
+      query("#from-date-time").textContent.includes("5,"),
+      "selected FROM date works"
+    );
+
+    await click(".date-time-control.to .date-time");
+
+    assert.strictEqual(
+      queryAll(".pika-table .is-disabled").length,
+      4,
+      "date just before selected FROM date is disabled"
+    );
+
+    await click('.pika-table td[data-day="10"] > .pika-button');
+
+    assert.ok(
+      query(".date-time-control.to button").textContent.includes("10,"),
+      "selected TO date works"
+    );
+
+    assert.strictEqual(
+      query(".pika-table .is-selected").textContent,
+      "10",
+      "selected date is the 10th"
+    );
+
+    await click(".delete-to-date");
+
+    assert.notOk(
+      query(".pika-table .is-selected"),
+      "deleting selected TO date works"
+    );
   });
 });

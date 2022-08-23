@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
 RSpec.describe Admin::SearchLogsController do
   fab!(:admin) { Fabricate(:admin) }
   fab!(:user) { Fabricate(:user) }
@@ -14,7 +12,7 @@ RSpec.describe Admin::SearchLogsController do
     SearchLog.clear_debounce_cache!
   end
 
-  context "#index" do
+  describe "#index" do
     it "raises an error if you aren't logged in" do
       get '/admin/logs/search_logs.json'
       expect(response.status).to eq(404)
@@ -39,7 +37,7 @@ RSpec.describe Admin::SearchLogsController do
     end
   end
 
-  context "#term" do
+  describe "#term" do
     it "raises an error if you aren't logged in" do
       get '/admin/logs/search_logs/term.json', params: {
         term: "ruby"

@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe UserNotificationSchedule do
+RSpec.describe UserNotificationSchedule do
   fab!(:user) { Fabricate(:user) }
 
   describe "validations" do

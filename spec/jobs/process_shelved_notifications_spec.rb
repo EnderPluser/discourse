@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe Jobs::ProcessShelvedNotifications do
+RSpec.describe Jobs::ProcessShelvedNotifications do
   fab!(:user) { Fabricate(:user) }
   let(:post) { Fabricate(:post) }
 

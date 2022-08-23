@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe NotificationEmailer do
-
+RSpec.describe NotificationEmailer do
   before do
     freeze_time
     NotificationEmailer.enable
@@ -34,7 +31,7 @@ describe NotificationEmailer do
       end
     end
 
-    context "inactive user" do
+    context "with an inactive user" do
       before { notification.user.active = false }
 
       it "doesn't enqueue a job" do
@@ -87,7 +84,7 @@ describe NotificationEmailer do
       end
     end
 
-    context "active but unapproved user" do
+    context "with an active but unapproved user" do
       before do
         SiteSetting.must_approve_users = true
         notification.user.approved = false
@@ -101,7 +98,7 @@ describe NotificationEmailer do
       end
     end
 
-    context "small action" do
+    context "with a small action" do
 
       it "doesn't enqueue a job" do
         Post.any_instance.expects(:post_type).returns(Post.types[:small_action])
@@ -142,7 +139,7 @@ describe NotificationEmailer do
 
   [true, false].each do |no_delay|
 
-    context 'user_mentioned' do
+    context 'with user_mentioned' do
       let(:no_delay) { no_delay }
       let(:type) { :user_mentioned }
       let(:delay) { SiteSetting.email_time_window_mins.minutes }
@@ -164,7 +161,7 @@ describe NotificationEmailer do
 
     end
 
-    context 'user_replied' do
+    context 'with user_replied' do
       let(:no_delay) { no_delay }
       let(:type) { :user_replied }
       let(:delay) { SiteSetting.email_time_window_mins.minutes }
@@ -173,7 +170,7 @@ describe NotificationEmailer do
       include_examples "enqueue_public"
     end
 
-    context 'user_quoted' do
+    context 'with user_quoted' do
       let(:no_delay) { no_delay }
       let(:type) { :user_quoted }
       let(:delay) { SiteSetting.email_time_window_mins.minutes }
@@ -182,7 +179,7 @@ describe NotificationEmailer do
       include_examples "enqueue_public"
     end
 
-    context 'user_linked' do
+    context 'with user_linked' do
       let(:no_delay) { no_delay }
       let(:type) { :user_linked }
       let(:delay) { SiteSetting.email_time_window_mins.minutes }
@@ -191,7 +188,7 @@ describe NotificationEmailer do
       include_examples "enqueue_public"
     end
 
-    context 'user_posted' do
+    context 'with user_posted' do
       let(:no_delay) { no_delay }
       let(:type) { :user_posted }
       let(:delay) { SiteSetting.email_time_window_mins.minutes }
@@ -200,7 +197,7 @@ describe NotificationEmailer do
       include_examples "enqueue_public"
     end
 
-    context 'user_private_message' do
+    context 'with user_private_message' do
       let(:no_delay) { no_delay }
       let(:type) { :user_private_message }
       let(:delay) { SiteSetting.personal_email_time_window_seconds }
@@ -218,7 +215,7 @@ describe NotificationEmailer do
 
     end
 
-    context 'user_invited_to_private_message' do
+    context 'with user_invited_to_private_message' do
       let(:no_delay) { no_delay }
       let(:type) { :user_invited_to_private_message }
       let(:delay) { SiteSetting.personal_email_time_window_seconds }
@@ -227,7 +224,7 @@ describe NotificationEmailer do
       include_examples "enqueue_public"
     end
 
-    context 'user_invited_to_topic' do
+    context 'with user_invited_to_topic' do
       let(:no_delay) { no_delay }
       let(:type) { :user_invited_to_topic }
       let(:delay) { SiteSetting.personal_email_time_window_seconds }
@@ -236,7 +233,7 @@ describe NotificationEmailer do
       include_examples "enqueue_public"
     end
 
-    context 'watching the first post' do
+    context 'when watching the first post' do
       let(:no_delay) { no_delay }
       let(:type) { :user_watching_first_post }
       let(:delay) { SiteSetting.email_time_window_mins.minutes }
@@ -245,7 +242,7 @@ describe NotificationEmailer do
       include_examples "enqueue_public"
     end
 
-    context 'post_approved' do
+    context 'with post_approved' do
       let(:no_delay) { no_delay }
       let(:type) { :post_approved }
       let(:delay) { SiteSetting.email_time_window_mins.minutes }

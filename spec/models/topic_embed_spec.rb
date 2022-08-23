@@ -1,16 +1,14 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
 require 'stringio'
 
-describe TopicEmbed do
+RSpec.describe TopicEmbed do
 
   it { is_expected.to belong_to :topic }
   it { is_expected.to belong_to :post }
   it { is_expected.to validate_presence_of :embed_url }
 
-  context '.import' do
-
+  describe '.import' do
     fab!(:user) { Fabricate(:user) }
     let(:title) { "How to turn a fish from good to evil in 30 seconds" }
     let(:url) { 'http://eviltrout.com/123' }
@@ -24,7 +22,7 @@ describe TopicEmbed do
       expect(TopicEmbed.count).to eq(0)
     end
 
-    context 'creation of a post' do
+    context 'when creating a post' do
       let!(:post) { TopicEmbed.import(user, url, title, contents) }
       let(:topic_embed) { TopicEmbed.find_by(post: post) }
 
@@ -129,7 +127,7 @@ describe TopicEmbed do
       end
     end
 
-    context "post creation supports markdown rendering" do
+    context "when post creation supports markdown rendering" do
       before do
         SiteSetting.embed_support_markdown = true
       end
@@ -174,7 +172,7 @@ describe TopicEmbed do
     end
   end
 
-  context '.topic_id_for_embed' do
+  describe '.topic_id_for_embed' do
     it "returns correct topic id irrespective of url protocol" do
       topic_embed = Fabricate(:topic_embed, embed_url: "http://example.com/post/248")
 
@@ -196,7 +194,7 @@ describe TopicEmbed do
   describe '.find_remote' do
     fab!(:embeddable_host) { Fabricate(:embeddable_host) }
 
-    context ".title_scrub" do
+    describe ".title_scrub" do
       let(:url) { 'http://eviltrout.com/123' }
       let(:contents) { "<title>Through the Looking Glass - Classic Books</title><body>some content here</body>" }
 
@@ -216,7 +214,7 @@ describe TopicEmbed do
       end
     end
 
-    context 'post with allowed classes "foo" and "emoji"' do
+    context 'with post with allowed classes "foo" and "emoji"' do
       fab!(:user) { Fabricate(:user) }
       let(:url) { 'http://eviltrout.com/123' }
       let(:contents) { "my normal size emoji <p class='foo'>Hi</p> <img class='emoji other foo' src='/images/smiley.jpg'>" }
@@ -248,7 +246,7 @@ describe TopicEmbed do
       end
     end
 
-    context 'post with author metadata' do
+    context 'with post with author metadata' do
       fab!(:user) { Fabricate(:user, username: 'eviltrout') }
       let(:url) { 'http://eviltrout.com/321' }
       let(:contents) { '<html><head><meta name="author" content="eviltrout"></head><body>rich and morty</body></html>' }
@@ -264,7 +262,7 @@ describe TopicEmbed do
       end
     end
 
-    context 'post with no allowed classes' do
+    context 'with post with no allowed classes' do
       fab!(:user) { Fabricate(:user) }
       let(:url) { 'http://eviltrout.com/123' }
       let(:contents) { "my normal size emoji <p class='foo'>Hi</p> <img class='emoji other foo' src='/images/smiley.jpg'>" }
@@ -292,7 +290,7 @@ describe TopicEmbed do
       end
     end
 
-    context "non-ascii URL" do
+    context "with non-ascii URL" do
       let(:url) { 'http://eviltrout.com/test/ماهی' }
       let(:contents) { "<title>سلام</title><body>این یک پاراگراف آزمون است.</body>" }
 
@@ -306,7 +304,7 @@ describe TopicEmbed do
       end
     end
 
-    context "encoded URL" do
+    context "with encoded URL" do
       let(:url) { 'http://example.com/hello%20world' }
       let(:contents) { "<title>Hello World!</title><body></body>" }
 
@@ -320,7 +318,7 @@ describe TopicEmbed do
       end
     end
 
-    context "non-http URL" do
+    context "with non-http URL" do
       it "throws an error" do
         url = '/test.txt'
 
@@ -328,7 +326,7 @@ describe TopicEmbed do
       end
     end
 
-    context "emails" do
+    context "with emails" do
       let(:url) { 'http://example.com/foo' }
       let(:contents) { '<p><a href="mailto:foo%40example.com">URL encoded @ symbol</a></p><p><a href="mailto:bar@example.com">normal mailto link</a></p>' }
 
@@ -344,7 +342,7 @@ describe TopicEmbed do
       end
     end
 
-    context "malformed href" do
+    context "with malformed href" do
       let(:url) { 'http://example.com/foo' }
       let(:contents) { '<p><a href="(http://foo.bar)">Baz</a></p>' }
 
@@ -357,7 +355,7 @@ describe TopicEmbed do
       end
     end
 
-    context 'canonical links' do
+    context 'with canonical links' do
       let(:url) { 'http://eviltrout.com/123?asd' }
       let(:canonical_url) { 'http://eviltrout.com/123' }
       let(:content) { "<head><link rel=\"canonical\" href=\"#{canonical_url}\"></head>" }
@@ -379,13 +377,39 @@ describe TopicEmbed do
   end
 
   describe '.absolutize_urls' do
-    let(:invalid_url) { 'http://source.com/#double#anchor' }
-    let(:contents) { "hello world new post <a href='/hello'>hello</a>" }
-
     it "handles badly formed URIs" do
+      invalid_url = 'http://source.com/#double#anchor'
+      contents = "hello world new post <a href='/hello'>hello</a>"
+
       raw = TopicEmbed.absolutize_urls(invalid_url, contents)
       expect(raw).to eq("hello world new post <a href=\"http://source.com/hello\">hello</a>")
     end
+
+    it "handles malformed links" do
+      url = "https://somesource.com"
+
+      contents = <<~HTML
+      hello world new post <a href="mailto:somemail@somewhere.org>">hello</a>
+      some image <img src="https:/><invalidimagesrc/">
+      HTML
+
+      raw = TopicEmbed.absolutize_urls(url, contents)
+      expect(raw).to eq(contents)
+    end
   end
 
+  describe ".imported_from_html" do
+    after { I18n.reload! }
+
+    it "uses the default site locale for the 'imported_from' footer" do
+      TranslationOverride.upsert!("en", "embed.imported_from", "English translation of embed.imported_from with %{link}")
+      TranslationOverride.upsert!("de", "embed.imported_from", "German translation of embed.imported_from with %{link}")
+
+      I18n.locale = :en
+      expected_html = TopicEmbed.imported_from_html("some_url")
+
+      I18n.locale = :de
+      expect(TopicEmbed.imported_from_html("some_url")).to eq(expected_html)
+    end
+  end
 end

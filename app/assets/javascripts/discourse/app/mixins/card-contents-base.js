@@ -4,7 +4,6 @@ import DiscourseURL from "discourse/lib/url";
 import Mixin from "@ember/object/mixin";
 import afterTransition from "discourse/lib/after-transition";
 import { escapeExpression } from "discourse/lib/utilities";
-import headerOutletHeights from "discourse/lib/header-outlet-height";
 import { inject as service } from "@ember/service";
 import { wantsNewWindow } from "discourse/lib/intercept-click";
 import { bind } from "discourse-common/utils/decorators";
@@ -63,7 +62,7 @@ export default Mixin.create({
     }
 
     const closestArticle = target.closest("article");
-    const postId = closestArticle ? closestArticle.dataset.postId : null;
+    const postId = closestArticle?.dataset?.postId || null;
     const wasVisible = this.visible;
     const previousTarget = this.cardTarget;
 
@@ -113,6 +112,7 @@ export default Mixin.create({
     });
 
     document.addEventListener("mousedown", this._clickOutsideHandler);
+    document.addEventListener("keyup", this._escListener);
 
     _cardClickListenerSelectors.forEach((selector) => {
       document
@@ -127,6 +127,8 @@ export default Mixin.create({
       this,
       "_topicHeaderTrigger"
     );
+
+    this.appEvents.on("card:close", this, "_close");
   },
 
   @bind
@@ -164,9 +166,9 @@ export default Mixin.create({
     return false;
   },
 
-  _topicHeaderTrigger(username, $target) {
+  _topicHeaderTrigger(username, target) {
     this.setProperties({ isFixed: true, isDocked: true });
-    return this._show(username, $target);
+    return this._show(username, target);
   },
 
   _bindMobileScroll() {
@@ -234,10 +236,9 @@ export default Mixin.create({
               }
             }
 
-            position.top -= this._calculateTopOffset(
-              $("#main-outlet").offset(),
-              headerOutletHeights()
-            );
+            // It looks better to have the card aligned slightly higher
+            position.top -= 24;
+
             if (isFixed) {
               position.top -= $("html").scrollTop();
               //if content is fixed and will be cut off on the bottom, display it above...
@@ -286,13 +287,6 @@ export default Mixin.create({
     });
   },
 
-  // some plugins/themes modify the page layout and may
-  // need to override this calculation for the card to
-  // position correctly
-  _calculateTopOffset(mainOutletOffset, outletHeights) {
-    return mainOutletOffset.top - outletHeights;
-  },
-
   @bind
   _hide() {
     if (!this.visible) {
@@ -327,6 +321,7 @@ export default Mixin.create({
     this._super(...arguments);
 
     document.removeEventListener("mousedown", this._clickOutsideHandler);
+    document.removeEventListener("keyup", this._escListener);
 
     _cardClickListenerSelectors.forEach((selector) => {
       document
@@ -343,25 +338,19 @@ export default Mixin.create({
       "_topicHeaderTrigger"
     );
 
+    this.appEvents.off("card:close", this, "_close");
     this._hide();
-  },
-
-  keyUp(e) {
-    if (e.key === "Escape") {
-      const target = this.cardTarget;
-      this._close();
-      target.focus();
-    }
   },
 
   @bind
   _clickOutsideHandler(event) {
     if (this.visible) {
-      const $target = $(event.target);
       if (
-        $target.closest(`[data-${this.elementId}]`).data(this.elementId) ||
-        $target.closest(`a.${this.triggeringLinkClass}`).length > 0 ||
-        $target.closest(`#${this.elementId}`).length > 0
+        event.target
+          .closest(`[data-${this.elementId}]`)
+          ?.getAttribute(`data-${this.elementId}`) ||
+        event.target.closest(`a.${this.triggeringLinkClass}`) ||
+        event.target.closest(`#${this.elementId}`)
       ) {
         return;
       }
@@ -370,5 +359,14 @@ export default Mixin.create({
     }
 
     return true;
+  },
+
+  @bind
+  _escListener(event) {
+    if (this.visible && event.key === "Escape") {
+      this._close();
+      this.cardTarget?.focus();
+      return;
+    }
   },
 });

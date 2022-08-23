@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe Onebox::Engine::GooglePlayAppOnebox do
+RSpec.describe Onebox::Engine::GooglePlayAppOnebox do
   before do
     @link = "https://play.google.com/store/apps/details?id=com.hulu.plus&hl=en"
 
@@ -10,7 +8,7 @@ describe Onebox::Engine::GooglePlayAppOnebox do
       .to_return(status: 200, body: onebox_response("googleplayapp"))
   end
 
-  include_context "engines"
+  include_context "with engines"
   it_behaves_like "an engine"
 
   describe "#to_html" do

@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe Onebox::Engine::SlidesOnebox do
+RSpec.describe Onebox::Engine::SlidesOnebox do
   let(:link) { "http://slides.com/drksephy/ecmascript-2015" }
   let(:html) { described_class.new(link).to_html }
 

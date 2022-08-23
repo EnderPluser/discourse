@@ -1,10 +1,9 @@
 # frozen_string_literal: true
 
-require "rails_helper"
 require_relative "shared_context_for_backup_restore"
 
-describe BackupRestore::BackupFileHandler, type: :multisite do
-  include_context "shared stuff"
+RSpec.describe BackupRestore::BackupFileHandler, type: :multisite do
+  include_context "with shared stuff"
 
   it "works with old backup file format" do
     test_multisite_connection("second") do

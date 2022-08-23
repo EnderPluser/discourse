@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe QuotedPost do
+RSpec.describe QuotedPost do
   it 'correctly extracts quotes' do
     Jobs.run_immediately!
 

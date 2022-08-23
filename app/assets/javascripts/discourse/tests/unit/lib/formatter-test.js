@@ -1,21 +1,18 @@
 import {
   autoUpdatingRelativeAge,
+  duration,
   durationTiny,
   longDate,
   number,
   relativeAge,
   updateRelativeAge,
 } from "discourse/lib/formatter";
-import { discourseModule } from "discourse/tests/helpers/qunit-helpers";
-import sinon from "sinon";
+import {
+  discourseModule,
+  fakeTime,
+} from "discourse/tests/helpers/qunit-helpers";
 import { test } from "qunit";
-
-function stringToDOMNode(string) {
-  let template = document.createElement("template");
-  string = string.trim();
-  template.innerHTML = string;
-  return template.content.firstChild;
-}
+import domFromString from "discourse-common/lib/dom-from-string";
 
 function formatMins(mins, opts = {}) {
   let dt = new Date(new Date() - mins * 60 * 1000);
@@ -44,19 +41,19 @@ function shortDateTester(format) {
 }
 
 function strip(html) {
-  return stringToDOMNode(html).innerText;
+  return domFromString(html)[0].innerText;
 }
 
 discourseModule("Unit | Utility | formatter", function (hooks) {
   hooks.beforeEach(function () {
-    this.clock = sinon.useFakeTimers(new Date(2012, 11, 31, 12, 0).getTime());
+    this.clock = fakeTime("2012-12-31 12:00");
   });
 
   hooks.afterEach(function () {
     this.clock.restore();
   });
 
-  test("formating medium length dates", function (assert) {
+  test("formatting medium length dates", function (assert) {
     let shortDateYear = shortDateTester("MMM D, 'YY");
 
     assert.strictEqual(
@@ -127,18 +124,18 @@ discourseModule("Unit | Utility | formatter", function (hooks) {
     );
 
     assert.strictEqual(
-      stringToDOMNode(formatDays(0, { format: "medium" })).title,
+      domFromString(formatDays(0, { format: "medium" }))[0].title,
       longDate(new Date())
     );
 
     assert.ok(
-      stringToDOMNode(formatDays(0, { format: "medium" })).classList.contains(
+      domFromString(formatDays(0, { format: "medium" }))[0].classList.contains(
         "date"
       )
     );
 
     this.clock.restore();
-    this.clock = sinon.useFakeTimers(new Date(2012, 0, 9, 12, 0).getTime()); // Jan 9, 2012
+    this.clock = fakeTime("2012-01-09 12:00");
 
     assert.strictEqual(
       strip(formatDays(8, { format: "medium" })),
@@ -150,7 +147,7 @@ discourseModule("Unit | Utility | formatter", function (hooks) {
     );
   });
 
-  test("formating tiny dates", function (assert) {
+  test("formatting tiny dates", function (assert) {
     let shortDateYear = shortDateTester("MMM 'YY");
 
     assert.strictEqual(formatMins(0), "1m");
@@ -212,7 +209,7 @@ discourseModule("Unit | Utility | formatter", function (hooks) {
     this.siteSettings.relative_date_duration = 14;
 
     this.clock.restore();
-    this.clock = sinon.useFakeTimers(new Date(2012, 0, 12, 12, 0).getTime()); // Jan 12, 2012
+    this.clock = fakeTime("2012-01-12 12:00");
 
     assert.strictEqual(formatDays(11), "11d");
     assert.strictEqual(formatDays(14), "14d");
@@ -220,7 +217,7 @@ discourseModule("Unit | Utility | formatter", function (hooks) {
     assert.strictEqual(formatDays(366), shortDateYear(366));
 
     this.clock.restore();
-    this.clock = sinon.useFakeTimers(new Date(2012, 0, 20, 12, 0).getTime()); // Jan 20, 2012
+    this.clock = fakeTime("2012-01-20 12:00");
 
     assert.strictEqual(formatDays(14), "14d");
     assert.strictEqual(formatDays(15), shortDate(15));
@@ -232,28 +229,28 @@ discourseModule("Unit | Utility | formatter", function (hooks) {
   test("autoUpdatingRelativeAge", function (assert) {
     let d = moment().subtract(1, "day").toDate();
 
-    let elem = stringToDOMNode(autoUpdatingRelativeAge(d));
+    let elem = domFromString(autoUpdatingRelativeAge(d))[0];
     assert.strictEqual(elem.dataset.format, "tiny");
     assert.strictEqual(elem.dataset.time, d.getTime().toString());
     assert.strictEqual(elem.title, "");
 
-    elem = stringToDOMNode(autoUpdatingRelativeAge(d, { title: true }));
+    elem = domFromString(autoUpdatingRelativeAge(d, { title: true }))[0];
     assert.strictEqual(elem.title, longDate(d));
 
-    elem = stringToDOMNode(
+    elem = domFromString(
       autoUpdatingRelativeAge(d, {
         format: "medium",
         title: true,
         leaveAgo: true,
       })
-    );
+    )[0];
 
     assert.strictEqual(elem.dataset.format, "medium-with-ago");
     assert.strictEqual(elem.dataset.time, d.getTime().toString());
     assert.strictEqual(elem.title, longDate(d));
     assert.strictEqual(elem.innerHTML, "1 day ago");
 
-    elem = stringToDOMNode(autoUpdatingRelativeAge(d, { format: "medium" }));
+    elem = domFromString(autoUpdatingRelativeAge(d, { format: "medium" }))[0];
     assert.strictEqual(elem.dataset.format, "medium");
     assert.strictEqual(elem.dataset.time, d.getTime().toString());
     assert.strictEqual(elem.title, "");
@@ -262,7 +259,7 @@ discourseModule("Unit | Utility | formatter", function (hooks) {
 
   test("updateRelativeAge", function (assert) {
     let d = new Date();
-    let elem = stringToDOMNode(autoUpdatingRelativeAge(d));
+    let elem = domFromString(autoUpdatingRelativeAge(d))[0];
     elem.dataset.time = d.getTime() - 2 * 60 * 1000;
 
     updateRelativeAge(elem);
@@ -270,9 +267,9 @@ discourseModule("Unit | Utility | formatter", function (hooks) {
     assert.strictEqual(elem.innerHTML, "2m");
 
     d = new Date();
-    elem = stringToDOMNode(
+    elem = domFromString(
       autoUpdatingRelativeAge(d, { format: "medium", leaveAgo: true })
-    );
+    )[0];
     elem.dataset.time = d.getTime() - 2 * 60 * 1000;
 
     updateRelativeAge(elem);
@@ -364,6 +361,114 @@ discourseModule("Unit | Utility | formatter", function (hooks) {
       durationTiny(86400 * 822),
       "> 2y",
       "822 days shows as > 2y"
+    );
+  });
+
+  test("duration (medium format)", function (assert) {
+    assert.strictEqual(
+      duration(undefined, { format: "medium" }),
+      "&mdash;",
+      "undefined is a dash"
+    );
+    assert.strictEqual(
+      duration(null, { format: "medium" }),
+      "&mdash;",
+      "null is a dash"
+    );
+    assert.strictEqual(
+      duration(0, { format: "medium" }),
+      "less than 1 min",
+      "0 seconds shows as less than 1 min"
+    );
+    assert.strictEqual(
+      duration(59, { format: "medium" }),
+      "less than 1 min",
+      "59 seconds shows as less than 1 min"
+    );
+    assert.strictEqual(
+      duration(60, { format: "medium" }),
+      "1 min",
+      "60 seconds shows as 1 min"
+    );
+    assert.strictEqual(
+      duration(90, { format: "medium" }),
+      "2 mins",
+      "90 seconds shows as 2 mins"
+    );
+    assert.strictEqual(
+      duration(120, { format: "medium" }),
+      "2 mins",
+      "120 seconds shows as 2 mins"
+    );
+    assert.strictEqual(
+      duration(60 * 45, { format: "medium" }),
+      "about 1 hour",
+      "45 minutes shows as about 1 hour"
+    );
+    assert.strictEqual(
+      duration(60 * 60, { format: "medium" }),
+      "about 1 hour",
+      "60 minutes shows as about 1 hour"
+    );
+    assert.strictEqual(
+      duration(60 * 90, { format: "medium" }),
+      "about 2 hours",
+      "90 minutes shows as about 2 hours"
+    );
+    assert.strictEqual(
+      duration(3600 * 23, { format: "medium" }),
+      "about 23 hours",
+      "23 hours shows as about 23 hours"
+    );
+    assert.strictEqual(
+      duration(3600 * 24 - 29, { format: "medium" }),
+      "1 day",
+      "23 hours 31 mins shows as 1 day"
+    );
+    assert.strictEqual(
+      duration(3600 * 24 * 89, { format: "medium" }),
+      "89 days",
+      "89 days shows as 89 days"
+    );
+    assert.strictEqual(
+      duration(60 * (525600 - 1), { format: "medium" }),
+      "12 months",
+      "364 days shows as 12 months"
+    );
+    assert.strictEqual(
+      duration(60 * 525600, { format: "medium" }),
+      "about 1 year",
+      "365 days shows as about 1 year"
+    );
+    assert.strictEqual(
+      duration(86400 * 456, { format: "medium" }),
+      "about 1 year",
+      "456 days shows as about 1 year"
+    );
+    assert.strictEqual(
+      duration(86400 * 457, { format: "medium" }),
+      "over 1 year",
+      "457 days shows as over 1 year"
+    );
+    assert.strictEqual(
+      duration(86400 * 638, { format: "medium" }),
+      "over 1 year",
+      "638 days shows as over 1 year"
+    );
+    assert.strictEqual(
+      duration(86400 * 639, { format: "medium" }),
+      "almost 2 years",
+      "639 days shows as almost 2 years"
+    );
+    assert.strictEqual(
+      duration(86400 * 821, { format: "medium" }),
+      "about 2 years",
+      "821 days shows as about 2 years"
+    );
+    assert.strictEqual(
+      duration(86400 * 822, { format: "medium" }),
+      "over 2 years",
+      "822 days shows as over 2 years"
     );
   });
 });

@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Admin::ThemesController do
+RSpec.describe Admin::ThemesController do
   fab!(:admin) { Fabricate(:admin) }
 
   it "is a subclass of AdminController" do
@@ -151,6 +149,35 @@ describe Admin::ThemesController do
       expect(json["theme"]["theme_fields"].length).to eq(2)
       expect(json["theme"]["auto_update"]).to eq(false)
       expect(UserHistory.where(action: UserHistory.actions[:change_theme]).count).to eq(1)
+    end
+
+    it 'can fail if theme is not accessible' do
+      post "/admin/themes/import.json", params: {
+        remote: 'git@github.com:discourse/discourse-inexistent-theme.git'
+      }
+
+      expect(response.status).to eq(422)
+      expect(response.parsed_body["errors"]).to contain_exactly(I18n.t("themes.import_error.git"))
+    end
+
+    it 'can force install theme' do
+      post "/admin/themes/import.json", params: {
+        remote: 'git@github.com:discourse/discourse-inexistent-theme.git',
+        force: true
+      }
+
+      expect(response.status).to eq(201)
+      expect(response.parsed_body["theme"]["name"]).to eq("discourse-inexistent-theme")
+    end
+
+    it 'fails to import with an error if uploads are not allowed' do
+      SiteSetting.theme_authorized_extensions = "nothing"
+
+      expect do
+        post "/admin/themes/import.json", params: { theme: theme_archive }
+      end.to change { Theme.count }.by (0)
+
+      expect(response.status).to eq(422)
     end
 
     it 'imports a theme from an archive' do
@@ -454,7 +481,7 @@ describe Admin::ThemesController do
       put "/admin/themes/#{theme.id}.json", params: {
         theme: {
           translations: {
-            "somegroup.somestring" => "overridenstring"
+            "somegroup.somestring" => "overriddenstring"
           }
         }
       }
@@ -462,7 +489,7 @@ describe Admin::ThemesController do
       # Response correct
       expect(response.status).to eq(200)
       json = response.parsed_body
-      expect(json["theme"]["translations"][0]["value"]).to eq("overridenstring")
+      expect(json["theme"]["translations"][0]["value"]).to eq("overriddenstring")
 
       # Database correct
       theme.reload
@@ -650,7 +677,7 @@ describe Admin::ThemesController do
       expect(response.parsed_body["bg"]).to eq("green")
 
       theme.reload
-      expect(theme.included_settings[:bg]).to eq("green")
+      expect(theme.cached_settings[:bg]).to eq("green")
       user_history = UserHistory.last
 
       expect(user_history.action).to eq(
@@ -663,7 +690,7 @@ describe Admin::ThemesController do
       theme.reload
 
       expect(response.status).to eq(200)
-      expect(theme.included_settings[:bg]).to eq("")
+      expect(theme.cached_settings[:bg]).to eq("")
     end
   end
 end

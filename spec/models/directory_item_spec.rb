@@ -1,11 +1,8 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe DirectoryItem do
-
+RSpec.describe DirectoryItem do
   describe '#period_types' do
-    context "verify enum sequence" do
+    context "when verifying enum sequence" do
       before do
         @period_types = DirectoryItem.period_types
       end
@@ -20,7 +17,7 @@ describe DirectoryItem do
     end
   end
 
-  context 'inactive and silenced users' do
+  describe 'inactive and silenced users' do
     it 'removes silenced users correctly' do
       post = create_post
       DirectoryItem.refresh_period!(:daily)
@@ -49,7 +46,7 @@ describe DirectoryItem do
     end
   end
 
-  context 'refresh' do
+  describe '.refresh!' do
     before do
       freeze_time DateTime.parse('2017-02-02 12:00')
       UserActionManager.enable
@@ -146,7 +143,7 @@ describe DirectoryItem do
       expect(monthly_directory_item.days_visited).to eq(3)
     end
 
-    context 'must approve users' do
+    context 'when must_approve_users is true' do
       before do
         SiteSetting.must_approve_users = true
       end
@@ -157,6 +154,5 @@ describe DirectoryItem do
         expect(DirectoryItem.where(user_id: user.id).count).to eq(0)
       end
     end
-
   end
 end

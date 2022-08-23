@@ -1,9 +1,7 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe PostOwnerChanger do
-  describe "change_owner!" do
+RSpec.describe PostOwnerChanger do
+  describe "#change_owner!" do
     fab!(:editor) { Fabricate(:admin) }
     fab!(:user_a) { Fabricate(:user) }
     let(:p1) { create_post(post_number: 1) }
@@ -14,7 +12,7 @@ describe PostOwnerChanger do
     it "raises an error with a parameter missing" do
       expect {
         PostOwnerChanger.new(post_ids: [p1.id], topic_id: topic.id, new_owner: nil, acting_user: editor)
-      }.to raise_error(ArgumentError)
+      }.to raise_error(ArgumentError, /new_owner/)
     end
 
     it "calls PostRevisor" do
@@ -87,7 +85,12 @@ describe PostOwnerChanger do
       expect(p4.reload.user).to eq(user_a)
     end
 
-    context "sets topic notification level for the new owner" do
+    it "sets 'posted' for TopicUser to true" do
+      PostOwnerChanger.new(post_ids: [p1.id], topic_id: topic.id, new_owner: user_a, acting_user: editor).change_owner!
+      expect(TopicUser.find_by(topic_id: topic.id, user_id: user_a.id).posted).to eq(true)
+    end
+
+    context "when setting topic notification level for the new owner" do
       let(:p4) { create_post(post_number: 2, topic: topic) }
 
       it "'watching' if the first post gets a new owner" do
@@ -103,7 +106,7 @@ describe PostOwnerChanger do
       end
     end
 
-    context "integration tests" do
+    context "with integration tests" do
       let(:p1user) { p1.user }
       let(:p2user) { p2.user }
 
@@ -112,7 +115,7 @@ describe PostOwnerChanger do
 
         p1user.user_stat.update!(
           topic_count: 1,
-          post_count: 1,
+          post_count: 0,
           first_post_created_at: p1.created_at,
         )
 
@@ -151,7 +154,7 @@ describe PostOwnerChanger do
         expect(p2user.topic_count).to eq(0)
         expect(p2user.post_count).to eq(0)
         expect(user_a.topic_count).to eq(1)
-        expect(user_a.post_count).to eq(2)
+        expect(user_a.post_count).to eq(1)
 
         p1_user_stat = p1user.user_stat
 
@@ -189,8 +192,7 @@ describe PostOwnerChanger do
         }.to_not change { user_stat.reload.post_count }
       end
 
-      context 'private message topic' do
-        # fab!(:topic) { Fabricate(:private_message_topic) }
+      context 'with private message topic' do
         let(:pm) do
           create_post(
             archetype: 'private_message',

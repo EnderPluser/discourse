@@ -85,3 +85,8 @@ uk:
           title: "Значки заголовків"
         spinners:
           title: "Спінери"
+        empty_state:
+          title: "Порожній стан"
+        rich_tooltip:
+          description: "Опис"
+          header: "Header"

@@ -85,3 +85,8 @@ pt:
           title: "Ícones de Cabeçalho"
         spinners:
           title: "Spinners"
+        empty_state:
+          title: "Estado vazio"
+        rich_tooltip:
+          description: "Descrição"
+          header: "Cabeçalho"

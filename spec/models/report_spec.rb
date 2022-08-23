@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Report do
+RSpec.describe Report do
   let(:user) { Fabricate(:user) }
   let(:c0) { Fabricate(:category, user: user) }
   let(:c1) { Fabricate(:category, parent_category: c0, user: user) }  # id: 2
@@ -211,7 +209,7 @@ describe Report do
       end
 
       context "with #{request_type}" do
-        before(:each) do
+        before do
           freeze_time DateTime.parse('2017-03-01 12:00')
           application_requests = [
             { date: 35.days.ago.to_time, req_type: ApplicationRequest.req_types[request_type.to_s], count: 35 },
@@ -267,12 +265,12 @@ describe Report do
       expect(report.total).to eq 1
     end
 
-    context 'no private messages' do
+    context 'with no private messages' do
       it 'returns an empty report' do
         expect(report.data).to be_blank
       end
 
-      context 'some public posts' do
+      context 'with some public posts' do
         it 'returns an empty report' do
           Fabricate(:post, topic: topic, user: user); Fabricate(:post, topic: topic, user: user)
           expect(report.data).to be_blank
@@ -281,7 +279,7 @@ describe Report do
       end
     end
 
-    context 'some private messages' do
+    context 'with some private messages' do
       before do
         Fabricate(:private_message_post, created_at: 25.hours.ago, user: user)
         Fabricate(:private_message_post, created_at: 1.hour.ago, user: user)
@@ -294,7 +292,7 @@ describe Report do
         expect(report.total).to eq 3
       end
 
-      context 'and some public posts' do
+      context 'with some public posts' do
         before do
           Fabricate(:post, user: user, topic: topic)
           Fabricate(:post, user: user, topic: topic)
@@ -308,7 +306,7 @@ describe Report do
       end
     end
 
-    context 'private message from system user' do
+    context 'with private message from system user' do
       before do
         Fabricate(:private_message_post, created_at: 1.hour.ago, user: Discourse.system_user)
       end
@@ -323,7 +321,7 @@ describe Report do
   describe 'user to user private messages' do
     let(:report) { Report.find('user_to_user_private_messages') }
 
-    context 'private message from system user' do
+    context 'with private message from system user' do
       before do
         Fabricate(:private_message_post, created_at: 1.hour.ago, user: Discourse.system_user)
       end
@@ -522,11 +520,12 @@ describe Report do
 
       before do
         freeze_time
-
-        PostActionCreator.new(flagger, post, PostActionType.types[:spam], message: 'bad').perform
       end
 
       it "returns a report with data" do
+        result = PostActionCreator.new(flagger, post, PostActionType.types[:spam], message: 'bad').perform
+
+        expect(result.success).to eq(true)
         expect(report.data).to be_present
 
         row = report.data[0]
@@ -627,7 +626,7 @@ describe Report do
         freeze_time(Date.today)
       end
 
-      context "moderators order" do
+      context "with moderators order" do
         before do
           Fabricate(:post, user: sam)
           Fabricate(:post, user: jeff)
@@ -639,7 +638,7 @@ describe Report do
         end
       end
 
-      context "time read" do
+      context "with time read" do
         before do
           sam.user_visits.create(visited_at: 2.days.ago, time_read: 200)
           sam.user_visits.create(visited_at: 1.day.ago, time_read: 100)
@@ -658,7 +657,7 @@ describe Report do
         end
       end
 
-      context "flags" do
+      context "with flags" do
         before do
           flagged_post = Fabricate(:post)
           result = PostActionCreator.off_topic(jeff, flagged_post)
@@ -672,7 +671,7 @@ describe Report do
         end
       end
 
-      context "topics" do
+      context "with topics" do
         before do
           Fabricate(:topic, user: sam)
           Fabricate(:topic, user: sam)
@@ -686,7 +685,7 @@ describe Report do
           expect(report.data[1][:username]).to eq('sam')
         end
 
-        context "private messages" do
+        context "with private messages" do
           before do
             Fabricate(:private_message_topic, user: jeff)
           end
@@ -698,7 +697,7 @@ describe Report do
         end
       end
 
-      context "posts" do
+      context "with posts" do
         before do
           Fabricate(:post, user: sam)
           Fabricate(:post, user: sam)
@@ -712,7 +711,7 @@ describe Report do
           expect(report.data[1][:username]).to eq('sam')
         end
 
-        context "private messages" do
+        context "with private messages" do
           before do
             Fabricate(:private_message_post, user: jeff)
           end
@@ -724,7 +723,7 @@ describe Report do
         end
       end
 
-      context "private messages" do
+      context "with private messages" do
         before do
           Fabricate(:post, user: sam)
           Fabricate(:post, user: jeff)
@@ -740,7 +739,7 @@ describe Report do
         end
       end
 
-      context "revisions" do
+      context "with revisions" do
         before do
           post = Fabricate(:post)
           post.revise(sam, raw: 'updated body', edit_reason: 'not cool')
@@ -751,7 +750,7 @@ describe Report do
           expect(report.data[0][:username]).to eq('sam')
         end
 
-        context "revise own post" do
+        context "when revising own post" do
           before do
             post = Fabricate(:post, user: sam)
             post.revise(sam, raw: 'updated body')
@@ -764,7 +763,7 @@ describe Report do
         end
       end
 
-      context "previous data" do
+      context "with previous data" do
         before do
           Fabricate(:topic, user: sam, created_at: 1.year.ago)
         end
@@ -803,7 +802,7 @@ describe Report do
 
         include_examples 'category filtering'
 
-        context "on subcategories" do
+        context "with subcategories" do
           let(:report) { Report.find('flags', filters: { category: c0.id, 'include_subcategories': true }) }
 
           include_examples 'category filtering on subcategories'
@@ -833,7 +832,7 @@ describe Report do
 
         include_examples 'category filtering'
 
-        context "on subcategories" do
+        context "with subcategories" do
           let(:report) { Report.find('topics', filters: { category: c0.id, 'include_subcategories': true }) }
 
           include_examples 'category filtering on subcategories'
@@ -895,7 +894,7 @@ describe Report do
 
       expect(report).to be_nil
 
-      expect(Rails.logger.errors).to eq([
+      expect(@fake_logger.errors).to eq([
         'Couldn’t create report `signups`: <ReportInitError x>'
       ])
     end
@@ -924,7 +923,7 @@ describe Report do
 
         include_examples 'category filtering'
 
-        context "on subcategories" do
+        context "with subcategories" do
           let(:report) { Report.find('posts', filters: { category: c0.id, 'include_subcategories': true }) }
 
           include_examples 'category filtering on subcategories'
@@ -956,7 +955,7 @@ describe Report do
 
         include_examples 'category filtering'
 
-        context "on subcategories" do
+        context "with subcategories" do
           let(:report) { Report.find('topics_with_no_response', filters: { category: c0.id, 'include_subcategories': true }) }
 
           include_examples 'category filtering on subcategories'
@@ -992,7 +991,7 @@ describe Report do
 
         include_examples 'category filtering'
 
-        context "on subcategories" do
+        context "with subcategories" do
           let(:report) { Report.find('likes', filters: { category: c0.id, 'include_subcategories': true }) }
 
           include_examples 'category filtering on subcategories'
@@ -1187,11 +1186,6 @@ describe Report do
     before do
       freeze_time(Time.now.at_midnight)
       Theme.clear_default!
-      ApplicationRequest.clear_cache!
-    end
-
-    after do
-      ApplicationRequest.clear_cache!
     end
 
     let(:reports) { Report.find('consolidated_page_views') }
@@ -1205,12 +1199,22 @@ describe Report do
     end
 
     context "with data" do
-      it "works" do
+      before do
+        CachedCounting.reset
+        CachedCounting.enable
         ApplicationRequest.enable
+      end
+
+      after do
+        ApplicationRequest.disable
+        CachedCounting.disable
+      end
+      it "works" do
         3.times { ApplicationRequest.increment!(:page_view_crawler) }
         2.times { ApplicationRequest.increment!(:page_view_logged_in) }
         ApplicationRequest.increment!(:page_view_anon)
-        ApplicationRequest.write_cache!
+
+        CachedCounting.flush
 
         page_view_crawler_report = reports.data.find { |r| r[:req] == "page_view_crawler" }
         page_view_logged_in_report = reports.data.find { |r| r[:req] == "page_view_logged_in" }
@@ -1225,8 +1229,6 @@ describe Report do
         expect(page_view_anon_report[:color]).to eql("#40c8ff")
         expect(page_view_anon_report[:data][0][:y]).to eql(1)
       ensure
-        ApplicationRequest.disable
-        ApplicationRequest.clear_cache!
       end
     end
   end

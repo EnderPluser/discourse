@@ -1,11 +1,10 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
 require_relative '../../../script/import_scripts/vanilla_body_parser'
 require_relative '../../../script/import_scripts/base/lookup_container'
 require_relative '../../../script/import_scripts/base/uploader'
 
-describe VanillaBodyParser do
+RSpec.describe VanillaBodyParser do
   let(:lookup) { ImportScripts::LookupContainer.new }
   let(:uploader) { ImportScripts::Uploader.new }
   let(:uploads_path) { 'spec/fixtures/images/vanilla_import' }

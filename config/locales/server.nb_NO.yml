@@ -157,7 +157,6 @@ nb_NO:
       s3_upload_bucket_is_required: "Du kan ikke aktivere opplasting til S3 hvis ikke du har satt innstillingen 's3_upload_bucket'."
     conflicting_google_user_id: 'Google Account ID for denne kontoen har endret seg; staben må manuelt godkjenne endringen av sikkerhetshensyn. Vennligst kontakt staben og pek dem til <br><a href="https://meta.discourse.org/t/76575">https://meta.discourse.org/t/76575</a>'
   invite:
-    user_exists: "Det er ikke nødvendig å invitere <b>%{email}</b>, de <a href='%{base_path}/u/%{username}/summary'>har allerede en konto!</a>"
     disabled_errors:
       invalid_access: "Du har ingen tilgang til denne resurssen."
   bulk_invite:
@@ -221,7 +220,6 @@ nb_NO:
   too_many_links:
     one: "Beklager, nye brukere kan bare legge til én lenke i et innlegg."
     other: "Beklager, nye brukere kan bare legge til %{count} lenker i et innlegg."
-  contains_blocked_word: "Innlegget ditt inneholder et ord som ikke er tillatt: %{word}"
   spamming_host: "Beklager, du kan ikke lenke til det domenet."
   user_is_suspended: "Utestengte brukere kan ikke skrive innlegg."
   topic_not_found: "Noe gikk galt. Kanskje emnet ble lukket eller slettet mens du leste det?"
@@ -599,12 +597,6 @@ nb_NO:
       title: "Lik"
       description: "Liker dette innlegget"
       short_description: "Lik dette innlegget"
-  user_activity:
-    no_bookmarks:
-      self: "Du har ingen bokmerkede innlegg; bokmerker lar deg raskt slå opp spesifike innlegg."
-      others: "Ingen bokmerker."
-    no_drafts:
-      self: "Du har ingen utkast; når du begynner å forfatte et svar på et emne vil det automatisk lagres som et nytt utkast."
   topic_flag_types:
     spam:
       title: "Spam"
@@ -953,7 +945,6 @@ nb_NO:
     min_personal_message_title_length: "Minste lengde i antall tegn for en meldingstittel"
     max_emojis_in_title: "Maksimalt antall emojier i en emnetittel"
     min_search_term_length: "Minimum lengde på søkeord i tegn"
-    search_tokenize_chinese_japanese_korean: "Tving søk til å tokenisere Kinesisk/Japansk/Koreansk selv på nettsteder uten KJK"
     search_prefer_recent_posts: "Hvis søking er tregt på et stort forum, vil dette valget forsøke å søke i en index av de nyeste innleggene først"
     search_recent_posts_size: "Hvor mange innlegg som beholdes i indeksen"
     log_search_queries: "Logg søkeord som benyttes av brukerne"
@@ -966,7 +957,6 @@ nb_NO:
     title: "Navnet på denne siden, slik du vil ha det i title-taggen."
     site_description: "Beskriv siden med en setning, vil brukes i beskrivelses-merkelappen."
     crawl_images: "Hent bilder fra ekstern URL for å sette inn korrekt høyde og bredde."
-    download_remote_images_to_local: "Konverter eksterne bilder ved å laste de ned lokalt, dette forhindrer ødelagte bilder."
     download_remote_images_threshold: "Minimum ledig diskplass for å kunne laste ned eksterne bilder (i prosent)"
     disabled_image_download_domains: "Eksterne bilder vil aldri bli lastet ned fra disse domenene (pipe-separert liste)."
     editing_grace_period: "(n) sekunder etter publisering vil redigering ikke opprette en ny versjon i redigeringsloggen."
@@ -985,7 +975,6 @@ nb_NO:
     show_pinned_excerpt_mobile: "Vis utdrag fra festede emner i mobil visning."
     show_pinned_excerpt_desktop: "Vis utdrag fra festede emner i desktop visning."
     post_onebox_maxlength: "Maksimal lengde på et onebox Discourse innlegg i antall tegn."
-    blocked_onebox_domains: "En liste over domener som aldri vil bli forsøkt oneboxet."
     allowed_inline_onebox_domains: "En liste over domener hvor onebox brukes i miniatyrstørrelse hvis lenken ikke har en tittel"
     max_oneboxes_per_post: "Maksimalt antall oneboxer i hvert innlegg."
     notification_email: "Adressen som skal brukes som avsender: på alle viktige system e-poster. Domenet som spesifiseres her må ha SPF, DKIM og reverse PTR record satt korrekt for at e-post skal nå frem."
@@ -1200,6 +1189,7 @@ nb_NO:
     set_password:
       title: "Sett passord"
   page_not_found:
+    page_title: "Side Ikke funnet"
     title: "Oisann! Den siden finnes ikke eller er privat."
     popular_topics: "Populært"
     recent_topics: "Nylig"
@@ -1413,34 +1403,15 @@ nb_NO:
       message: "<p>Vi har sendt aktiverings-eposten på nytt til <b>%{email}</b>"
   safe_mode:
     title: "Start sikkerhetsmodus"
-    description: "Sikkerhetsmodus lar deg teste nettstedet ditt uten at tillegg eller tilpasninger lastes."
   wizard:
     title: "Discourse-oppsett"
     step:
-      forum_title:
-        title: "Navn"
-      introduction:
-        title: "Introduksjon"
       privacy:
-        title: "Tilgang"
         fields:
-          privacy:
-            choices:
-              open:
-                label: "Offentlig"
-              restricted:
-                label: "Privat"
-      contact:
-        fields:
-          contact_email:
-            label: "E-post"
-            placeholder: "navn@example.com"
-          contact_url:
-            label: "Nettside"
-          site_contact:
-            label: "Automatiserte meldinger"
-      corporate:
-        title: "Organisasjon"
+          login_required:
+            placeholder: "Privat"
+          must_approve_users:
+            placeholder: "Krev godkjenning"
       styling:
         fields:
           styling_preview:
@@ -1457,16 +1428,18 @@ nb_NO:
                 label: "Kategorier og siste emner"
               categories_and_top_topics:
                 label: "Kategorier og toppemner"
-      logos:
-        title: "Logoer"
+      branding:
         fields:
           logo:
             label: "Primær logo"
-      icons:
-        title: "Ikoner"
-        fields:
           large_icon:
             label: "Stort ikon"
+      corporate:
+        fields:
+          contact_url:
+            label: "Nettside"
+          site_contact:
+            label: "Automatiserte meldinger"
   joined: "Medlem fra"
   discourse_push_notifications:
     popup:

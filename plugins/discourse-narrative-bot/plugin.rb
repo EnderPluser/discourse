@@ -5,7 +5,6 @@
 # version: 1.0
 # authors: Nick Sahler, Alan Tan
 # url: https://github.com/discourse/discourse/tree/main/plugins/discourse-narrative-bot
-# transpile_js: true
 
 enabled_site_setting :discourse_narrative_bot_enabled
 hide_plugin if self.respond_to?(:hide_plugin)
@@ -19,7 +18,7 @@ if Rails.env == "development"
   # 3. we have a post_edited hook that queues a job for bot input
   # 4. if you are not running sidekiq in dev every time you save a post it will trigger it
   # 5. but the constant can not be autoloaded
-  Rails.configuration.autoload_paths << File.expand_path('../autoload', __FILE__)
+  Rails.configuration.autoload_paths << File.expand_path('../autoload/jobs', __FILE__)
 end
 
 require_relative 'lib/discourse_narrative_bot/welcome_post_type_site_setting.rb'
@@ -31,12 +30,12 @@ after_initialize do
   Mime::Type.register "image/svg+xml", :svg
 
   [
-    '../autoload/jobs/bot_input.rb',
-    '../autoload/jobs/narrative_timeout.rb',
-    '../autoload/jobs/narrative_init.rb',
-    '../autoload/jobs/send_default_welcome_message.rb',
-    '../autoload/jobs/onceoff/grant_badges.rb',
-    '../autoload/jobs/onceoff/remap_old_bot_images.rb',
+    '../autoload/jobs/regular/bot_input.rb',
+    '../autoload/jobs/regular/narrative_timeout.rb',
+    '../autoload/jobs/regular/narrative_init.rb',
+    '../autoload/jobs/regular/send_default_welcome_message.rb',
+    '../autoload/jobs/onceoff/discourse_narrative_bot/grant_badges.rb',
+    '../autoload/jobs/onceoff/discourse_narrative_bot/remap_old_bot_images.rb',
     '../lib/discourse_narrative_bot/actions.rb',
     '../lib/discourse_narrative_bot/base.rb',
     '../lib/discourse_narrative_bot/new_user_narrative.rb',
@@ -223,7 +222,7 @@ after_initialize do
       Jobs.enqueue(:bot_input,
         user_id: user.id,
         post_id: post.id,
-        input: :reply
+        input: "reply"
       )
     end
   end
@@ -233,7 +232,7 @@ after_initialize do
       Jobs.enqueue(:bot_input,
         user_id: post.user.id,
         post_id: post.id,
-        input: :edit
+        input: "edit"
       )
     end
   end
@@ -244,7 +243,7 @@ after_initialize do
         user_id: user.id,
         post_id: post.id,
         topic_id: post.topic_id,
-        input: :delete
+        input: "delete"
       )
     end
   end
@@ -254,7 +253,7 @@ after_initialize do
       Jobs.enqueue(:bot_input,
         user_id: user.id,
         post_id: post.id,
-        input: :recover
+        input: "recover"
       )
     end
   end
@@ -264,11 +263,9 @@ after_initialize do
       input =
         case self.post_action_type_id
         when *PostActionType.flag_types.values
-          self.post_action_type_id == PostActionType.types[:inappropriate] ? :flag : :reply
+          self.post_action_type_id == PostActionType.types[:inappropriate] ? "flag" : "reply"
         when PostActionType.types[:like]
-          :like
-        when PostActionType.types[:bookmark]
-          :bookmark
+          "like"
         end
 
       if input
@@ -282,8 +279,10 @@ after_initialize do
   end
 
   self.add_model_callback(Bookmark, :after_commit, on: :create) do
-    if self.post && self.user.enqueue_narrative_bot_job?
-      Jobs.enqueue(:bot_input, user_id: self.user_id, post_id: self.post_id, input: :bookmark)
+    if self.user.enqueue_narrative_bot_job?
+      if self.bookmarkable_type == "Post"
+        Jobs.enqueue(:bot_input, user_id: self.user_id, post_id: self.bookmarkable_id, input: "bookmark")
+      end
     end
   end
 
@@ -294,7 +293,7 @@ after_initialize do
       Jobs.enqueue(:bot_input,
         user_id: user_id,
         topic_id: topic_id,
-        input: :topic_notification_level_changed
+        input: "topic_notification_level_changed"
       )
     end
   end

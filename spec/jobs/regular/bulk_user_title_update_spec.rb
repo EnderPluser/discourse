@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Jobs::BulkUserTitleUpdate do
+RSpec.describe Jobs::BulkUserTitleUpdate do
   fab!(:badge) { Fabricate(:badge, name: 'Protector of the Realm', allow_title: true) }
   fab!(:user) { Fabricate(:user) }
   fab!(:other_user) { Fabricate(:user) }

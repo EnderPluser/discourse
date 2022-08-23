@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe Onebox::Engine::GoogleMapsOnebox do
+RSpec.describe Onebox::Engine::GoogleMapsOnebox do
   URLS = {
     short: {
       test: "https://goo.gl/maps/rEG3D",

@@ -1,3 +1,4 @@
+import { inject as service } from "@ember/service";
 import { empty, equal, notEmpty } from "@ember/object/computed";
 import Component from "@ember/component";
 import DiscourseURL from "discourse/lib/url";
@@ -22,10 +23,11 @@ export default Component.extend({
   forwardEvent: false,
   preventFocus: false,
   onKeyDown: null,
+  router: service(),
 
   isLoading: computed({
     set(key, value) {
-      this.set("forceDisabled", value);
+      this.set("forceDisabled", !!value);
       return value;
     },
   }),
@@ -71,7 +73,7 @@ export default Component.extend({
 
   @discourseComputed("title", "translatedTitle")
   computedTitle(title, translatedTitle) {
-    if (this.title) {
+    if (title) {
       return I18n.t(title);
     }
     return translatedTitle;
@@ -79,7 +81,7 @@ export default Component.extend({
 
   @discourseComputed("label", "translatedLabel")
   computedLabel(label, translatedLabel) {
-    if (this.label) {
+    if (label) {
       return I18n.t(label);
     }
     return translatedLabel;
@@ -109,10 +111,24 @@ export default Component.extend({
     if (this.onKeyDown) {
       e.stopPropagation();
       this.onKeyDown(e);
+    } else if (e.key === "Enter") {
+      this._triggerAction(e);
+      return false;
     }
   },
 
   click(event) {
+    this._triggerAction(event);
+    return false;
+  },
+
+  mouseDown(event) {
+    if (this.preventFocus) {
+      event.preventDefault();
+    }
+  },
+
+  _triggerAction(event) {
     let { action } = this;
 
     if (action) {
@@ -135,19 +151,15 @@ export default Component.extend({
       }
     }
 
+    if (this.route) {
+      this.router.transitionTo(this.route);
+    }
+
     if (this.href && this.href.length) {
       DiscourseURL.routeTo(this.href);
     }
 
     event.preventDefault();
     event.stopPropagation();
-
-    return false;
-  },
-
-  mouseDown(event) {
-    if (this.preventFocus) {
-      event.preventDefault();
-    }
   },
 });

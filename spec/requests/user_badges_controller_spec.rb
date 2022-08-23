@@ -1,12 +1,11 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe UserBadgesController do
+RSpec.describe UserBadgesController do
   fab!(:user) { Fabricate(:user) }
+  fab!(:admin) { Fabricate(:admin) }
   fab!(:badge) { Fabricate(:badge) }
 
-  context 'index' do
+  describe '#index' do
     fab!(:badge) { Fabricate(:badge, target_posts: true, show_posts: false) }
     it 'does not leak private info' do
       p = create_post
@@ -28,7 +27,7 @@ describe UserBadgesController do
     end
   end
 
-  context 'index' do
+  describe '#index' do
     let!(:user_badge) { UserBadge.create(badge: badge, user: user, granted_by: Discourse.system_user, granted_at: Time.now) }
 
     it 'requires username or badge_id to be specified' do
@@ -71,7 +70,7 @@ describe UserBadgesController do
       expect(parsed["user_badges"].first.has_key?('count')).to eq(true)
     end
 
-    context 'hidden profiles' do
+    context 'with hidden profiles' do
       before do
         user.user_option.update_columns(hide_profile_and_presence: true)
       end
@@ -90,7 +89,7 @@ describe UserBadgesController do
     end
   end
 
-  context 'create' do
+  describe '#create' do
     it 'requires username to be specified' do
       post "/user_badges.json", params: { badge_id: badge.id }
       expect(response.status).to eq(400)
@@ -107,7 +106,6 @@ describe UserBadgesController do
     end
 
     it 'grants badges from staff' do
-      admin = Fabricate(:admin)
       post_1 = create_post
 
       sign_in(admin)
@@ -169,7 +167,6 @@ describe UserBadgesController do
     end
 
     it 'does not grant badge when external link is used in reason' do
-      admin = Fabricate(:admin)
       post = create_post
 
       sign_in(admin)
@@ -184,7 +181,6 @@ describe UserBadgesController do
     end
 
     it 'does not grant badge if invalid discourse post/topic link is used in reason' do
-      admin = Fabricate(:admin)
       post = create_post
 
       sign_in(admin)
@@ -199,7 +195,6 @@ describe UserBadgesController do
     end
 
     it 'grants badge when valid post/topic link is given in reason' do
-      admin = Fabricate(:admin)
       post = create_post
 
       sign_in(admin)
@@ -217,7 +212,6 @@ describe UserBadgesController do
       it 'grants badge when valid post/topic link is given in reason' do
         set_subfolder "/discuss"
 
-        admin = Fabricate(:admin)
         post = create_post
 
         sign_in(admin)
@@ -239,7 +233,7 @@ describe UserBadgesController do
     end
   end
 
-  context 'destroy' do
+  describe '#destroy' do
     let!(:user_badge) { UserBadge.create(badge: badge, user: user, granted_by: Discourse.system_user, granted_at: Time.now) }
 
     it 'checks that the user is authorized to revoke a badge' do
@@ -248,7 +242,6 @@ describe UserBadgesController do
     end
 
     it 'revokes the badge' do
-      admin = Fabricate(:admin)
       sign_in(admin)
       delete "/user_badges/#{user_badge.id}.json"
 
@@ -268,7 +261,7 @@ describe UserBadgesController do
     end
   end
 
-  context "favorite" do
+  describe "#favorite" do
     let!(:user_badge) { UserBadge.create(badge: badge, user: user, granted_by: Discourse.system_user, granted_at: Time.now) }
 
     it "checks that the user is authorized to favorite the badge" do

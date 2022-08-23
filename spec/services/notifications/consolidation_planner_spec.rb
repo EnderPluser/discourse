@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Notifications::ConsolidationPlanner do
+RSpec.describe Notifications::ConsolidationPlanner do
   describe '#consolidate_or_save!' do
     let(:threshold) { 1 }
     fab!(:user) { Fabricate(:user) }

@@ -55,9 +55,10 @@
   .badge-notification {
     position: relative;
     top: -2px;
+
     &.new-topic {
       top: -1px;
-      padding-left: 5px;
+      padding-left: 2px;
     }
   }
 
@@ -175,21 +176,16 @@
   }
 }
 
-button.dismiss-read {
-  float: right;
-  margin-bottom: 5px;
-  margin-left: 10px;
+.dismiss-container-top {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .category-breadcrumb {
   // only target the top-level li, not dropdowns
-  > li {
-    height: 100%;
-  }
   .select-kit {
     align-self: stretch;
     height: 100%;
-    margin-bottom: var(--nav-space);
   }
 }
 
@@ -199,6 +195,41 @@ button.dismiss-read {
 }
 
 /* Tablet (portrait) ----------- */
+
+// These styles kick in a little earlier when the sidebar appears
+
+@include breakpoint(medium, $sidebar: true) {
+  .topic-list {
+    // suppress views column
+    .views {
+      display: none;
+    }
+    // reduce width for more title space
+    .posts {
+      width: 50px;
+    }
+    .posters {
+      width: 30px;
+      text-align: center;
+    }
+    // show only the first poster
+    .topic-list-data.posters {
+      a:first-child .avatar.latest:not(.single) {
+        top: 0px;
+        left: 0px;
+      }
+      a:not(.latest) {
+        display: none;
+      }
+      a.latest {
+        width: 100%;
+        img {
+          margin: 0 auto;
+        }
+      }
+    }
+  }
+}
 
 @include breakpoint(medium) {
   // slightly smaller font, tighten spacing on nav pills
@@ -219,29 +250,24 @@ button.dismiss-read {
       padding: 10px;
       font-size: $font-0;
     }
-    // suppress views column
-    .views {
-      display: none;
-    }
-    // reduce width for more title space
-    .posts {
-      width: 50px;
-    }
-    .posters {
-      width: 30px;
-      text-align: center;
-    }
-    // show only the first poster
-    .topic-list-data.posters {
-      a:not(.latest) {
-        display: none;
-      }
-      a.latest {
-        width: 100%;
-        img {
-          margin: 0 auto;
-        }
-      }
-    }
+  }
+}
+
+.welcome-topic-banner {
+  border: 1px solid var(--primary-low);
+  box-shadow: 0px 0px 6px 0px rgba(0, 0, 0, 0.12);
+  padding: 10px;
+  display: flex;
+  flex-direction: row;
+
+  .col-text {
+    width: 70%;
+  }
+  .col-button {
+    width: 30%;
+    display: flex;
+    align-self: center;
+    justify-content: flex-end;
+    padding-right: 30px;
   }
 }

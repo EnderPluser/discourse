@@ -13,6 +13,8 @@ import { notEmpty } from "@ember/object/computed";
 import { propertyNotEqual } from "discourse/lib/computed";
 import { schedule } from "@ember/runloop";
 import { getOwner } from "discourse-common/lib/get-owner";
+import { applyLocalDates } from "discourse/lib/local-dates";
+import generateDateMarkup from "discourse/plugins/discourse-local-dates/lib/local-date-markup-generator";
 
 export default Component.extend({
   timeFormat: "HH:mm:ss",
@@ -56,19 +58,21 @@ export default Component.extend({
     });
   },
 
-  @observes("markup")
+  @observes("computedConfig.{from,to,options}", "options", "isValid", "isRange")
   _renderPreview() {
     discourseDebounce(
       this,
       function () {
         const markup = this.markup;
-
         if (markup) {
           cookAsync(markup).then((result) => {
             this.set("currentPreview", result);
-            schedule("afterRender", () =>
-              this.$(".preview .discourse-local-date").applyLocalDates()
-            );
+            schedule("afterRender", () => {
+              applyLocalDates(
+                document.querySelectorAll(".preview .discourse-local-date"),
+                this.siteSettings
+              );
+            });
           });
         }
       },
@@ -204,8 +208,8 @@ export default Component.extend({
   ),
 
   @computed("currentUserTimezone")
-  formatedCurrentUserTimezone(timezone) {
-    return timezone.replace("_", " ").replace("Etc/", "").split("/");
+  formattedCurrentUserTimezone(timezone) {
+    return timezone.replace("_", " ").replace("Etc/", "").replace("/", ", ");
   },
 
   @computed("formats")
@@ -258,32 +262,8 @@ export default Component.extend({
     ];
   },
 
-  _generateDateMarkup(config, options, isRange) {
-    let text = `[date=${config.date}`;
-
-    if (config.time) {
-      text += ` time=${config.time}`;
-    }
-
-    if (config.format && config.format.length) {
-      text += ` format="${config.format}"`;
-    }
-
-    if (options.timezone) {
-      text += ` timezone="${options.timezone}"`;
-    }
-
-    if (options.timezones && options.timezones.length) {
-      text += ` timezones="${options.timezones.join("|")}"`;
-    }
-
-    if (options.recurring && !isRange) {
-      text += ` recurring="${options.recurring}"`;
-    }
-
-    text += `]`;
-
-    return text;
+  _generateDateMarkup(fromDateTime, options, isRange, toDateTime) {
+    return generateDateMarkup(fromDateTime, options, isRange, toDateTime);
   },
 
   @computed("advancedMode")
@@ -298,14 +278,17 @@ export default Component.extend({
     let text;
 
     if (isValid && config.from) {
-      text = this._generateDateMarkup(config.from, options, isRange);
-
       if (config.to && config.to.range) {
-        text += ` → `;
-        text += this._generateDateMarkup(config.to, options, isRange);
+        text = this._generateDateMarkup(
+          config.from,
+          options,
+          isRange,
+          config.to
+        );
+      } else {
+        text = this._generateDateMarkup(config.from, options, isRange);
       }
     }
-
     return text;
   },
 
@@ -382,8 +365,10 @@ export default Component.extend({
     return new Promise((resolve) => {
       loadScript("/javascripts/pikaday.js").then(() => {
         const options = {
-          field: this.$(`.fake-input`)[0],
-          container: this.$(`#picker-container-${this.elementId}`)[0],
+          field: this.element.querySelector(".fake-input"),
+          container: this.element.querySelector(
+            `#picker-container-${this.elementId}`
+          ),
           bound: false,
           format: "YYYY-MM-DD",
           reposition: false,
@@ -416,22 +401,22 @@ export default Component.extend({
   },
 
   _setPickerMinDate(date) {
-    if (date && !moment(date, this.dateFormat).isValid()) {
-      date = null;
-    }
-
     schedule("afterRender", () => {
-      this._picker.setMinDate(moment(date, this.dateFormat).toDate());
+      if (moment(date, this.dateFormat).isValid()) {
+        this._picker.setMinDate(moment(date, this.dateFormat).toDate());
+      } else {
+        this._picker.setMinDate(null);
+      }
     });
   },
 
   _setPickerDate(date) {
-    if (date && !moment(date, this.dateFormat).isValid()) {
-      date = null;
-    }
-
     schedule("afterRender", () => {
-      this._picker.setDate(moment.utc(date), true);
+      if (moment(date, this.dateFormat).isValid()) {
+        this._picker.setDate(moment.utc(date), true);
+      } else {
+        this._picker.setDate(null);
+      }
     });
   },
 

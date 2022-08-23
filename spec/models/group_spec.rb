@@ -1,13 +1,11 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Group do
+RSpec.describe Group do
   let(:admin) { Fabricate(:admin) }
   let(:user) { Fabricate(:user) }
   let(:group) { Fabricate(:group) }
 
-  context 'validations' do
+  describe 'Validations' do
     describe '#grant_trust_level' do
       describe 'when trust level is not valid' do
         it 'should not be valid' do
@@ -68,7 +66,7 @@ describe Group do
   end
 
   describe '#builtin' do
-    context "verify enum sequence" do
+    context "when verifying enum sequence" do
       before do
         @builtin = Group.builtin
       end
@@ -242,6 +240,41 @@ describe Group do
       staged.unstage!
 
       expect(GroupUser.where(user_id: staged.id).count).to eq(2)
+    end
+
+    describe 'after updating automatic group members' do
+      fab!(:user) { Fabricate(:user) }
+
+      it 'triggers an event when a user is removed from an automatic group' do
+        tl3_users = Group.find(Group::AUTO_GROUPS[:trust_level_3])
+        tl3_users.add(user)
+
+        events = DiscourseEvent.track_events do
+          Group.refresh_automatic_group!(:trust_level_3)
+        end
+
+        expect(GroupUser.exists?(group: tl3_users, user: user)).to eq(false)
+        publish_event_job_args = Jobs::PublishGroupMembershipUpdates.jobs.last['args'].first
+        expect(publish_event_job_args["user_ids"]).to include(user.id)
+        expect(publish_event_job_args["group_id"]).to eq(tl3_users.id)
+        expect(publish_event_job_args["type"]).to include('remove')
+      end
+
+      it 'triggers an event when a user is added to an automatic group' do
+        tl0_users = Group.find(Group::AUTO_GROUPS[:trust_level_0])
+
+        expect(GroupUser.exists?(group: tl0_users, user: user)).to eq(false)
+
+        events = DiscourseEvent.track_events do
+          Group.refresh_automatic_group!(:trust_level_0)
+        end
+
+        expect(GroupUser.exists?(group: tl0_users, user: user)).to eq(true)
+        publish_event_job_args = Jobs::PublishGroupMembershipUpdates.jobs.last['args'].first
+        expect(publish_event_job_args["user_ids"]).to include(user.id)
+        expect(publish_event_job_args["group_id"]).to eq(tl0_users.id)
+        expect(publish_event_job_args["type"]).to eq('add')
+      end
     end
 
     it "makes sure the everyone group is not visible except to staff" do
@@ -569,7 +602,7 @@ describe Group do
     end
   end
 
-  context "group management" do
+  describe "group management" do
     fab!(:group) { Fabricate(:group) }
 
     it "by default has no managers" do
@@ -925,21 +958,36 @@ describe Group do
   end
 
   describe '.search_groups' do
-    fab!(:group) { Fabricate(:group, name: 'tEsT_more_things', full_name: 'Abc something awesome') }
-    let(:messageable_group) { Fabricate(:group, name: "MessageableGroup", messageable_level: Group::ALIAS_LEVELS[:everyone]) }
+
+    def search_group_names(name)
+      Group.search_groups(name, sort: :auto).map(&:name)
+    end
 
     it 'should return the right groups' do
-      group
+      group_name = Fabricate(:group, name: 'tEsT_more_things', full_name: 'Abc something awesome').name
 
-      expect(Group.search_groups('te')).to eq([group])
-      expect(Group.search_groups('TE')).to eq([group])
-      expect(Group.search_groups('es')).to eq([group])
-      expect(Group.search_groups('ES')).to eq([group])
-      expect(Group.search_groups('ngs')).to eq([group])
-      expect(Group.search_groups('sOmEthi')).to eq([group])
-      expect(Group.search_groups('abc')).to eq([group])
-      expect(Group.search_groups('sOmEthi')).to eq([group])
-      expect(Group.search_groups('test2')).to eq([])
+      expect(search_group_names('te')).to eq([group_name])
+      expect(search_group_names('TE')).to eq([group_name])
+      expect(search_group_names('es')).to eq([group_name])
+      expect(search_group_names('ES')).to eq([group_name])
+      expect(search_group_names('ngs')).to eq([group_name])
+      expect(search_group_names('sOmEthi')).to eq([group_name])
+      expect(search_group_names('abc')).to eq([group_name])
+      expect(search_group_names('sOmEthi')).to eq([group_name])
+      expect(search_group_names('test2')).to eq([])
+    end
+
+    it "should prioritize prefix matches on group's name or fullname" do
+      Fabricate(:group, name: 'pears_11', full_name: 'fred apple')
+      Fabricate(:group, name: 'apples', full_name: 'jane orange')
+      Fabricate(:group, name: 'oranges2', full_name: 'nothing')
+      Fabricate(:group, name: 'oranges1', full_name: 'ms fred')
+
+      expect(search_group_names('ap')).to eq(['apples', 'pears_11'])
+      expect(search_group_names('fr')).to eq(['pears_11', 'oranges1'])
+      expect(search_group_names('oran')).to eq(['oranges1', 'oranges2', 'apples'])
+
+      expect(search_group_names('pearsX11')).to eq([])
     end
   end
 
@@ -1075,7 +1123,7 @@ describe Group do
     end
   end
 
-  context "Unicode usernames and group names" do
+  describe "Unicode usernames and group names" do
     before { SiteSetting.unicode_usernames = true }
 
     it "should normalize the name" do
@@ -1225,6 +1273,23 @@ describe Group do
       expect(group.smtp_updated_by).to eq(user)
     end
 
+    it "records the change for singular setting changes" do
+      group.update(
+        smtp_port: 587,
+        smtp_ssl: true,
+        smtp_server: "smtp.gmail.com",
+        email_username: "test@gmail.com",
+        email_password: "password",
+      )
+      group.record_email_setting_changes!(user)
+      group.reload
+
+      old_updated_at = group.smtp_updated_at
+      group.update(email_from_alias: "somealias@gmail.com")
+      group.record_email_setting_changes!(user)
+      expect(group.reload.smtp_updated_at).not_to eq_time(old_updated_at)
+    end
+
     it "enables imap and records the change" do
       group.update(
         imap_port: 587,
@@ -1312,6 +1377,13 @@ describe Group do
       group.update!(email_username: "abc@test.com", incoming_email: "support@test.com")
       expect(Group.find_by_email("abc@test.com")).to eq(group)
       expect(Group.find_by_email("support@test.com")).to eq(group)
+      expect(Group.find_by_email("nope@test.com")).to eq(nil)
+    end
+
+    it "finds the group by its email_from_alias" do
+      group.update!(email_username: "abc@test.com", email_from_alias: "somealias@test.com")
+      expect(Group.find_by_email("abc@test.com")).to eq(group)
+      expect(Group.find_by_email("somealias@test.com")).to eq(group)
       expect(Group.find_by_email("nope@test.com")).to eq(nil)
     end
   end

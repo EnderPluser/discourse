@@ -1,7 +1,5 @@
 # frozen_string_literal: true
-require 'rails_helper'
-
-describe ThemeJavascriptsController do
+RSpec.describe ThemeJavascriptsController do
   include ActiveSupport::Testing::TimeHelpers
 
   def clear_disk_cache

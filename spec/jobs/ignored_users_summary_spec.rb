@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Jobs::IgnoredUsersSummary do
+RSpec.describe Jobs::IgnoredUsersSummary do
   before do
     SiteSetting.ignored_users_count_message_threshold = 1
     SiteSetting.ignored_users_message_gap_days = 365

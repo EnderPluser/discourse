@@ -1,9 +1,9 @@
 import {
   acceptance,
   count,
-  queryAll,
+  query,
 } from "discourse/tests/helpers/qunit-helpers";
-import hbs from "htmlbars-inline-precompile";
+import { hbs } from "ember-cli-htmlbars";
 import { test } from "qunit";
 import { visit } from "@ember/test-helpers";
 
@@ -12,12 +12,14 @@ const CONNECTOR =
 
 acceptance("Plugin Outlet - Single Template", function (needs) {
   needs.hooks.beforeEach(() => {
+    // eslint-disable-next-line no-undef
     Ember.TEMPLATES[
       CONNECTOR
     ] = hbs`<span class='hello-username'>{{model.username}}</span>`;
   });
 
   needs.hooks.afterEach(() => {
+    // eslint-disable-next-line no-undef
     delete Ember.TEMPLATES[CONNECTOR];
   });
 
@@ -29,7 +31,7 @@ acceptance("Plugin Outlet - Single Template", function (needs) {
       "it has class names"
     );
     assert.strictEqual(
-      queryAll(".hello-username").text(),
+      query(".hello-username").innerText,
       "eviltrout",
       "it renders into the outlet"
     );

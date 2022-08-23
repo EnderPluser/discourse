@@ -42,12 +42,12 @@ class CookedPostProcessor
       remove_full_quote_on_direct_reply if new_post
       post_process_oneboxes
       post_process_images
+      add_blocked_hotlinked_media_placeholders
       post_process_quotes
       optimize_urls
       remove_user_ids
       update_post_image
       enforce_nofollow
-      pull_hotlinked_images
       grant_badges
       @post.link_post_uploads(fragments: @doc)
       DiscourseEvent.trigger(:post_process_cooked, @doc, @post)
@@ -78,9 +78,8 @@ class CookedPostProcessor
           q.css('blockquote').text
         )
 
-        if comparer.modified?
-          q['class'] = ((q['class'] || '') + " quote-modified").strip
-        end
+        q['class'] = ((q['class'] || '') + " quote-post-not-found").strip if comparer.missing?
+        q['class'] = ((q['class'] || '') + " quote-modified").strip if comparer.modified?
       end
     end
   end
@@ -120,80 +119,9 @@ class CookedPostProcessor
     )
   end
 
-  def add_image_placeholder!(img)
-    src = img["src"].sub(/^https?:/i, "")
-
-    if large_images.include?(src)
-      return add_large_image_placeholder!(img)
-    elsif broken_images.include?(src)
-      return add_broken_image_placeholder!(img)
-    end
-
-    false
-  end
-
-  def add_large_image_placeholder!(img)
-    url = img["src"]
-
-    is_hyperlinked = is_a_hyperlink?(img)
-
-    placeholder = create_node("div", "large-image-placeholder")
-    img.add_next_sibling(placeholder)
-    placeholder.add_child(img)
-
-    a = create_link_node(nil, url, true)
-    img.add_next_sibling(a)
-
-    span = create_span_node("url", url)
-    a.add_child(span)
-    span.add_previous_sibling(create_icon_node("far-image"))
-    span.add_next_sibling(
-      create_span_node(
-        "help",
-        I18n.t(
-          "upload.placeholders.too_large_humanized",
-          max_size: ActiveSupport::NumberHelper.number_to_human_size(SiteSetting.max_image_size_kb.kilobytes)
-        )
-      )
-    )
-
-    # Only if the image is already linked
-    if is_hyperlinked
-      parent = placeholder.parent
-      parent.add_next_sibling(placeholder)
-
-      if parent.name == 'a' && parent["href"].present?
-        if url == parent["href"]
-          parent.remove
-        else
-          parent["class"] = "link"
-          a.add_previous_sibling(parent)
-
-          lspan = create_span_node("url", parent["href"])
-          parent.add_child(lspan)
-          lspan.add_previous_sibling(create_icon_node("link"))
-        end
-      end
-    end
-
-    img.remove
-    true
-  end
-
-  def add_broken_image_placeholder!(img)
-    img.name = "span"
-    img.set_attribute("class", "broken-image")
-    img.set_attribute("title", I18n.t("post.image_placeholder.broken"))
-    img << "<svg class=\"fa d-icon d-icon-unlink svg-icon\" aria-hidden=\"true\"><use href=\"#unlink\"></use></svg>"
-    img.remove_attribute("src")
-    img.remove_attribute("width")
-    img.remove_attribute("height")
-    true
-  end
-
   def extract_images
     # all images with a src attribute
-    @doc.css("img[src]") -
+    @doc.css("img[src], img[#{PrettyText::BLOCKED_HOTLINKED_SRC_ATTR}]") -
     # minus data images
     @doc.css("img[src^='data']") -
     # minus emojis
@@ -214,18 +142,6 @@ class CookedPostProcessor
     @doc.css("img.onebox-avatar-inline") -
     # minus github onebox profile images
     @doc.css(".onebox.githubfolder img")
-  end
-
-  def large_images
-    @large_images ||= @post&.custom_fields[Post::LARGE_IMAGES].presence || []
-  end
-
-  def broken_images
-    @broken_images ||= @post&.custom_fields[Post::BROKEN_IMAGES].presence || []
-  end
-
-  def downloaded_images
-    @downloaded_images ||= @post&.downloaded_images || []
   end
 
   def convert_to_link!(img)
@@ -415,7 +331,10 @@ class CookedPostProcessor
 
     %w{src data-small-upload}.each do |selector|
       @doc.css("img[#{selector}]").each do |img|
-        img[selector] = UrlHelper.cook_url(img[selector].to_s, secure: @post.with_secure_media?)
+        custom_emoji = img["class"]&.include?("emoji-custom") && Emoji.custom?(img["title"])
+        img[selector] = UrlHelper.cook_url(
+          img[selector].to_s, secure: @post.with_secure_media? && !custom_emoji
+        )
       end
     end
   end
@@ -442,46 +361,68 @@ class CookedPostProcessor
     PrettyText.add_rel_attributes_to_user_content(@doc, add_nofollow)
   end
 
-  def pull_hotlinked_images
-    return if @opts[:skip_pull_hotlinked_images]
-    # have we enough disk space?
-    disable_if_low_on_disk_space # But still enqueue the job
-    # make sure no other job is scheduled
-    Jobs.cancel_scheduled_job(:pull_hotlinked_images, post_id: @post.id)
-    # schedule the job
-    delay = SiteSetting.editing_grace_period + 1
-    Jobs.enqueue_in(delay.seconds.to_i, :pull_hotlinked_images, post_id: @post.id)
-  end
-
-  def disable_if_low_on_disk_space
-    return if Discourse.store.external?
-    return if !SiteSetting.download_remote_images_to_local
-    return if available_disk_space >= SiteSetting.download_remote_images_threshold
-
-    SiteSetting.download_remote_images_to_local = false
-
-    # log the site setting change
-    reason = I18n.t("disable_remote_images_download_reason")
-    staff_action_logger = StaffActionLogger.new(Discourse.system_user)
-    staff_action_logger.log_site_setting_change("download_remote_images_to_local", true, false, details: reason)
-
-    # also send a private message to the site contact user notify_about_low_disk_space
-    notify_about_low_disk_space
-  end
-
-  def notify_about_low_disk_space
-    SystemMessage.create_from_system_user(Discourse.site_contact_user, :download_remote_images_disabled)
-  end
-
-  def available_disk_space
-    100 - DiskSpace.percent_free("#{Rails.root}/public/uploads")
-  end
-
   private
 
   def post_process_images
     extract_images.each do |img|
-      convert_to_link!(img) unless add_image_placeholder!(img)
+      still_an_image = process_hotlinked_image(img)
+      convert_to_link!(img) if still_an_image
+    end
+  end
+
+  def process_hotlinked_image(img)
+    @hotlinked_map ||= @post.post_hotlinked_media.preload(:upload).map { |r| [r.url, r] }.to_h
+    normalized_src = PostHotlinkedMedia.normalize_src(img["src"] || img[PrettyText::BLOCKED_HOTLINKED_SRC_ATTR])
+    info = @hotlinked_map[normalized_src]
+
+    still_an_image = true
+
+    if info&.too_large?
+      if img.ancestors('.onebox, .onebox-body').blank?
+        add_large_image_placeholder!(img)
+      else
+        img.remove
+      end
+
+      still_an_image = false
+    elsif info&.download_failed?
+      if img.ancestors('.onebox, .onebox-body').blank?
+        add_broken_image_placeholder!(img)
+      else
+        img.remove
+      end
+
+      still_an_image = false
+    elsif info&.downloaded? && upload = info&.upload
+      img["src"] = UrlHelper.cook_url(upload.url, secure: @with_secure_media)
+      img.delete(PrettyText::BLOCKED_HOTLINKED_SRC_ATTR)
+    end
+
+    still_an_image
+  end
+
+  def add_blocked_hotlinked_media_placeholders
+    @doc.css([
+      "[#{PrettyText::BLOCKED_HOTLINKED_SRC_ATTR}]",
+      "[#{PrettyText::BLOCKED_HOTLINKED_SRCSET_ATTR}]",
+    ].join(',')).each do |el|
+      src = el[PrettyText::BLOCKED_HOTLINKED_SRC_ATTR] ||
+        el[PrettyText::BLOCKED_HOTLINKED_SRCSET_ATTR]&.split(',')&.first&.split(' ')&.first
+
+      if el.name == "img"
+        add_blocked_hotlinked_image_placeholder!(el)
+        next
+      end
+
+      if ["video", "audio"].include?(el.parent.name)
+        el = el.parent
+      end
+
+      if el.parent.classes.include?("video-container")
+        el = el.parent
+      end
+
+      add_blocked_hotlinked_media_placeholder!(el, src)
     end
   end
 

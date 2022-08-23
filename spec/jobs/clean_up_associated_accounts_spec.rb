@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Jobs::CleanUpAssociatedAccounts do
+RSpec.describe Jobs::CleanUpAssociatedAccounts do
   subject { Jobs::CleanUpAssociatedAccounts.new.execute({}) }
 
   it "deletes the correct records" do

@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
 RSpec.describe TopicTimer, type: :model do
   fab!(:topic_timer) { Fabricate(:topic_timer) }
   fab!(:topic) { Fabricate(:topic) }
@@ -9,7 +7,7 @@ RSpec.describe TopicTimer, type: :model do
 
   before { freeze_time }
 
-  context "validations" do
+  describe "Validations" do
     describe "pending_timers scope" do
       it "does not return deleted timers" do
         topic_timer.trash!
@@ -38,6 +36,7 @@ RSpec.describe TopicTimer, type: :model do
         end
       end
     end
+
     describe '#status_type' do
       it 'should ensure that only one active public topic status update exists' do
         topic_timer.update!(topic: topic)
@@ -104,7 +103,7 @@ RSpec.describe TopicTimer, type: :model do
     end
   end
 
-  context 'callbacks' do
+  describe 'Callbacks' do
     describe 'when #execute_at and #user_id are not changed' do
       it 'should not schedule another to update topic' do
         Jobs.expects(:enqueue_at).never

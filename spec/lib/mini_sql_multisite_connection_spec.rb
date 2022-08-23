@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe MiniSqlMultisiteConnection do
+RSpec.describe MiniSqlMultisiteConnection do
 
   describe "after_commit" do
     it "works for 'fake' (joinable) transactions" do

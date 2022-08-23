@@ -20,39 +20,32 @@ class InvitesController < ApplicationController
     RateLimiter.new(nil, "invites-show-#{request.remote_ip}", 100, 1.minute).performed!
 
     invite = Invite.find_by(invite_key: params[:id])
+
     if invite.present? && invite.redeemable?
       if current_user
-        added_to_group = false
+        redeemed = false
 
-        if invite.groups.present?
-          invite_by_guardian = Guardian.new(invite.invited_by)
-          new_group_ids = invite.groups.pluck(:id) - current_user.group_users.pluck(:group_id)
-          new_group_ids.each do |id|
-            if group = Group.find_by(id: id)
-              if invite_by_guardian.can_edit_group?(group)
-                group.add(current_user)
-                added_to_group = true
-              end
-            end
-          end
+        begin
+          invite.redeem(email: current_user.email)
+          redeemed = true
+        rescue ActiveRecord::RecordNotSaved, Invite::UserExists
+          # This is not ideal but `Invite#redeem` raises either `Invite::UserExists` or `ActiveRecord::RecordNotSaved`
+          # error when it fails to redeem the invite. If redemption fails for a logged in user, we will just ignore it.
         end
 
-        create_topic_invite_notifications(invite, current_user)
-
-        if topic = invite.topics.first
-          new_guardian = Guardian.new(current_user)
-          return redirect_to(topic.url) if new_guardian.can_see?(topic)
-        elsif added_to_group
-          return redirect_to(path("/"))
+        if redeemed && (topic = invite.topics.first) && current_user.guardian.can_see?(topic)
+          create_topic_invite_notifications(invite, current_user)
+          return redirect_to(topic.url)
         end
 
-        return ensure_not_logged_in
+        return redirect_to(path("/"))
       end
 
       email = Email.obfuscate(invite.email)
 
       # Show email if the user already authenticated their email
       different_external_email = false
+
       if session[:authentication]
         auth_result = Auth::Result.from_session_data(session[:authentication], user: nil)
         if invite.email == auth_result.email
@@ -63,6 +56,7 @@ class InvitesController < ApplicationController
       end
 
       email_verified_by_link = invite.email_token.present? && params[:t] == invite.email_token
+
       if email_verified_by_link
         email = invite.email
       end
@@ -131,29 +125,33 @@ class InvitesController < ApplicationController
 
     guardian.ensure_can_invite_to_forum!(groups)
 
-    begin
-      invite = Invite.generate(current_user,
-        email: params[:email],
-        domain: params[:domain],
-        skip_email: params[:skip_email],
-        invited_by: current_user,
-        custom_message: params[:custom_message],
-        max_redemptions_allowed: params[:max_redemptions_allowed],
-        topic_id: topic&.id,
-        group_ids: groups&.map(&:id),
-        expires_at: params[:expires_at],
-      )
-
-      if invite.present?
-        render_serialized(invite, InviteSerializer, scope: guardian, root: nil, show_emails: params.has_key?(:email), show_warnings: true)
-      else
-        render json: failed_json, status: 422
-      end
-    rescue Invite::UserExists => e
-      render_json_error(e.message)
-    rescue ActiveRecord::RecordInvalid => e
-      render_json_error(e.record.errors.full_messages.first)
+    if !groups_can_see_topic?(groups, topic)
+      editable_topic_groups = topic.category.groups.filter { |g| guardian.can_edit_group?(g) }
+      return render_json_error(I18n.t("invite.requires_groups", groups: editable_topic_groups.pluck(:name).join(", ")))
     end
+
+    invite = Invite.generate(current_user,
+      email: params[:email],
+      domain: params[:domain],
+      skip_email: params[:skip_email],
+      invited_by: current_user,
+      custom_message: params[:custom_message],
+      max_redemptions_allowed: params[:max_redemptions_allowed],
+      topic_id: topic&.id,
+      group_ids: groups&.map(&:id),
+      expires_at: params[:expires_at],
+    )
+
+    if invite.present?
+      render_serialized(invite, InviteSerializer, scope: guardian, root: nil, show_emails: params.has_key?(:email), show_warnings: true)
+    else
+      render json: failed_json, status: 422
+    end
+  rescue Invite::UserExists => e
+    return render json: {}, status: 200 if SiteSetting.hide_email_address_taken?
+    render_json_error(e.message)
+  rescue ActiveRecord::RecordInvalid => e
+    render_json_error(e.record.errors.full_messages.first)
   end
 
   def retrieve
@@ -194,13 +192,21 @@ class InvitesController < ApplicationController
         groups.each { |group| invite.invited_groups.find_or_create_by!(group_id: group.id) } if groups.present?
       end
 
+      if !groups_can_see_topic?(invite.groups, invite.topics.first)
+        editable_topic_groups = invite.topics.first.category.groups.filter { |g| guardian.can_edit_group?(g) }
+        return render_json_error(I18n.t("invite.requires_groups", groups: editable_topic_groups.pluck(:name).join(", ")))
+      end
+
       if params.has_key?(:email)
         old_email = invite.email.presence
         new_email = params[:email].presence
 
         if new_email
           if Invite.where.not(id: invite.id).find_by(email: new_email.downcase, invited_by_id: current_user.id)&.redeemable?
-            return render_json_error(I18n.t("invite.invite_exists", email: new_email), status: 409)
+            return render_json_error(
+              I18n.t("invite.invite_exists", email: CGI.escapeHTML(new_email)),
+              status: 409
+            )
           end
         end
 
@@ -239,6 +245,7 @@ class InvitesController < ApplicationController
       begin
         invite.update!(params.permit(:email, :custom_message, :max_redemptions_allowed, :expires_at))
       rescue ActiveRecord::RecordInvalid => e
+        return render json: {}, status: 200 if SiteSetting.hide_email_address_taken? && e.record.email_already_exists?
         return render_json_error(e.record.errors.full_messages.first)
       end
     end
@@ -298,7 +305,7 @@ class InvitesController < ApplicationController
         return render json: failed_json.merge(message: I18n.t('invite.not_found_json')), status: 404
       end
 
-      log_on_user(user) if user.active?
+      log_on_user(user) if user.active? && user.guardian.can_access_forum?
       user.update_timezone_if_missing(params[:timezone])
       post_process_invite(user)
       create_topic_invite_notifications(invite, user)
@@ -307,14 +314,19 @@ class InvitesController < ApplicationController
       response = {}
 
       if user.present?
-        if user.active?
+        if user.active? && user.guardian.can_access_forum?
           if user.guardian.can_see?(topic)
             response[:redirect_to] = path(topic.relative_url)
           else
             response[:redirect_to] = path("/")
           end
         else
-          response[:message] = I18n.t('invite.confirm_email')
+          response[:message] = if user.active?
+            I18n.t('activation.approval_required')
+          else
+            I18n.t('invite.confirm_email')
+          end
+
           if user.guardian.can_see?(topic)
             cookies[:destination_url] = path(topic.relative_url)
           end
@@ -352,6 +364,12 @@ class InvitesController < ApplicationController
 
   def resend_all_invites
     guardian.ensure_can_resend_all_invites!(current_user)
+
+    begin
+      RateLimiter.new(current_user, "bulk-reinvite-per-day", 1, 1.day, apply_limit_to_staff: true).performed!
+    rescue RateLimiter::LimitExceeded
+      return render_json_error(I18n.t("rate_limiter.slow_down"))
+    end
 
     Invite.pending(current_user)
       .where('invites.email IS NOT NULL')
@@ -427,6 +445,15 @@ class InvitesController < ApplicationController
     end
   end
 
+  def groups_can_see_topic?(groups, topic)
+    if topic&.read_restricted_category?
+      topic_groups = topic.category.groups
+      return false if (groups & topic_groups).blank?
+    end
+
+    true
+  end
+
   def post_process_invite(user)
     user.enqueue_welcome_message('welcome_invite') if user.send_welcome_message
 
@@ -455,7 +482,7 @@ class InvitesController < ApplicationController
           topic.create_invite_notification!(
             user,
             Notification.types[:invited_to_topic],
-            invite.invited_by.username
+            invite.invited_by
           )
         end
       end

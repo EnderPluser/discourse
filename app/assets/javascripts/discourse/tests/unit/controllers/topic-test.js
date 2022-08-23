@@ -1,11 +1,10 @@
 import EmberObject from "@ember/object";
 import { Placeholder } from "discourse/lib/posts-with-placeholders";
-import { Promise } from "rsvp";
 import Topic from "discourse/models/topic";
 import User from "discourse/models/user";
 import { discourseModule } from "discourse/tests/helpers/qunit-helpers";
 import { next } from "@ember/runloop";
-import pretender from "discourse/tests/helpers/create-pretender";
+import pretender, { response } from "discourse/tests/helpers/create-pretender";
 import { settled } from "@ember/test-helpers";
 import { test } from "qunit";
 
@@ -21,24 +20,26 @@ discourseModule("Unit | Controller | topic", function (hooks) {
   });
 
   hooks.afterEach(function () {
-    this.registry.unregister("current-user:main");
+    this.registry.unregister("service:current-user");
     let topic = this.container.lookup("controller:topic");
     topic.setProperties({
       selectedPostIds: [],
       selectedPostUsername: null,
-      currentUser: null,
     });
   });
 
   test("editTopic", function (assert) {
     const model = Topic.create();
     const controller = this.getController("topic", { model });
-    assert.not(controller.get("editingTopic"), "we are not editing by default");
+    assert.notOk(
+      controller.get("editingTopic"),
+      "we are not editing by default"
+    );
 
     controller.set("model.details.can_edit", false);
     controller.send("editTopic");
 
-    assert.not(
+    assert.notOk(
       controller.get("editingTopic"),
       "calling editTopic doesn't enable editing unless the user can edit"
     );
@@ -58,7 +59,7 @@ discourseModule("Unit | Controller | topic", function (hooks) {
 
     controller.send("cancelEditingTopic");
 
-    assert.not(
+    assert.notOk(
       controller.get("editingTopic"),
       "cancelling edit mode reverts the property value"
     );
@@ -68,9 +69,8 @@ discourseModule("Unit | Controller | topic", function (hooks) {
     const model = Topic.create();
     let destroyed = false;
     let modalDisplayed = false;
-    model.destroy = () => {
+    model.destroy = async () => {
       destroyed = true;
-      return Promise.resolve();
     };
     const controller = this.getController("topic", {
       model,
@@ -84,7 +84,7 @@ discourseModule("Unit | Controller | topic", function (hooks) {
 
     model.set("views", 10000);
     controller.send("deleteTopic");
-    assert.not(destroyed, "don't destroy popular topic");
+    assert.notOk(destroyed, "don't destroy popular topic");
     assert.ok(modalDisplayed, "display confirmation modal for popular topic");
 
     model.set("views", 3);
@@ -96,7 +96,7 @@ discourseModule("Unit | Controller | topic", function (hooks) {
     const model = Topic.create();
     const controller = this.getController("topic", { model });
 
-    assert.not(
+    assert.notOk(
       controller.get("multiSelect"),
       "multi selection mode is disabled by default"
     );
@@ -123,7 +123,7 @@ discourseModule("Unit | Controller | topic", function (hooks) {
     controller.send("toggleMultiSelect");
     await settled();
 
-    assert.not(
+    assert.notOk(
       controller.get("multiSelect"),
       "calling 'toggleMultiSelect' twice disables multi selection mode"
     );
@@ -145,7 +145,7 @@ discourseModule("Unit | Controller | topic", function (hooks) {
       2,
       "selectedPosts only contains already loaded posts"
     );
-    assert.not(
+    assert.notOk(
       controller.get("selectedPosts").some((p) => p === undefined),
       "selectedPosts only contains valid post objects"
     );
@@ -157,7 +157,7 @@ discourseModule("Unit | Controller | topic", function (hooks) {
 
     controller.set("selectedPostIds", [1, 2]);
 
-    assert.not(
+    assert.notOk(
       controller.get("selectedAllPosts"),
       "not all posts are selected"
     );
@@ -240,11 +240,14 @@ discourseModule("Unit | Controller | topic", function (hooks) {
     const model = Topic.create({ posts_count: 3 });
     const controller = this.getController("topic", { model, site });
 
-    assert.not(controller.get("showSelectedPostsAtBottom"), "false on desktop");
+    assert.notOk(
+      controller.get("showSelectedPostsAtBottom"),
+      "false on desktop"
+    );
 
     site.set("mobileView", true);
 
-    assert.not(
+    assert.notOk(
       controller.get("showSelectedPostsAtBottom"),
       "requires at least 3 posts on mobile"
     );
@@ -259,10 +262,14 @@ discourseModule("Unit | Controller | topic", function (hooks) {
 
   test("canDeleteSelected", function (assert) {
     const currentUser = User.create({ admin: false });
-    this.registry.register("current-user:main", currentUser, {
+    this.registry.register("service:current-user", currentUser, {
       instantiate: false,
     });
-    this.registry.injection("controller", "currentUser", "current-user:main");
+    this.registry.injection(
+      "controller",
+      "currentUser",
+      "service:current-user"
+    );
     let model = topicWithStream({
       posts: [
         { id: 1, can_delete: false },
@@ -273,18 +280,17 @@ discourseModule("Unit | Controller | topic", function (hooks) {
     });
     const controller = this.getController("topic", {
       model,
-      currentUser,
     });
     const selectedPostIds = controller.get("selectedPostIds");
 
-    assert.not(
+    assert.notOk(
       controller.get("canDeleteSelected"),
       "false when no posts are selected"
     );
 
     selectedPostIds.pushObject(1);
 
-    assert.not(
+    assert.notOk(
       controller.get("canDeleteSelected"),
       "false when can't delete one of the selected posts"
     );
@@ -298,7 +304,7 @@ discourseModule("Unit | Controller | topic", function (hooks) {
 
     selectedPostIds.pushObject(1);
 
-    assert.not(
+    assert.notOk(
       controller.get("canDeleteSelected"),
       "false when all posts are selected and user is staff"
     );
@@ -324,14 +330,14 @@ discourseModule("Unit | Controller | topic", function (hooks) {
     const controller = this.getController("topic", { model });
     const selectedPostIds = controller.get("selectedPostIds");
 
-    assert.not(
+    assert.notOk(
       controller.get("canMergeTopic"),
       "can't merge topic when no posts are selected"
     );
 
     selectedPostIds.pushObject(1);
 
-    assert.not(
+    assert.notOk(
       controller.get("canMergeTopic"),
       "can't merge topic when can't move posts"
     );
@@ -358,10 +364,14 @@ discourseModule("Unit | Controller | topic", function (hooks) {
 
   test("canChangeOwner", function (assert) {
     const currentUser = User.create({ admin: false });
-    this.registry.register("current-user:main", currentUser, {
+    this.registry.register("service:current-user", currentUser, {
       instantiate: false,
     });
-    this.registry.injection("controller", "currentUser", "current-user:main");
+    this.registry.injection(
+      "controller",
+      "currentUser",
+      "service:current-user"
+    );
 
     let model = topicWithStream({
       posts: [
@@ -370,21 +380,19 @@ discourseModule("Unit | Controller | topic", function (hooks) {
       ],
       stream: [1, 2],
     });
-    model.set("currentUser", { admin: false });
     const controller = this.getController("topic", {
       model,
-      currentUser,
     });
     const selectedPostIds = controller.get("selectedPostIds");
 
-    assert.not(
+    assert.notOk(
       controller.get("canChangeOwner"),
       "false when no posts are selected"
     );
 
     selectedPostIds.pushObject(1);
 
-    assert.not(controller.get("canChangeOwner"), "false when not admin");
+    assert.notOk(controller.get("canChangeOwner"), "false when not admin");
 
     currentUser.set("admin", true);
 
@@ -395,9 +403,59 @@ discourseModule("Unit | Controller | topic", function (hooks) {
 
     selectedPostIds.pushObject(2);
 
-    assert.not(
+    assert.notOk(
       controller.get("canChangeOwner"),
       "false when admin but more than 1 user"
+    );
+  });
+
+  test("modCanChangeOwner", function (assert) {
+    const currentUser = User.create({ moderator: false });
+    this.registry.register("service:current-user", currentUser, {
+      instantiate: false,
+    });
+    this.registry.injection(
+      "controller",
+      "currentUser",
+      "service:current-user"
+    );
+
+    let model = topicWithStream({
+      posts: [
+        { id: 1, username: "gary" },
+        { id: 2, username: "lili" },
+      ],
+      stream: [1, 2],
+    });
+    const controller = this.getController("topic", {
+      model,
+      siteSettings: {
+        moderators_change_post_ownership: true,
+      },
+    });
+    const selectedPostIds = controller.get("selectedPostIds");
+
+    assert.notOk(
+      controller.get("canChangeOwner"),
+      "false when no posts are selected"
+    );
+
+    selectedPostIds.pushObject(1);
+
+    assert.notOk(controller.get("canChangeOwner"), "false when not moderator");
+
+    currentUser.set("moderator", true);
+
+    assert.ok(
+      controller.get("canChangeOwner"),
+      "true when moderator and one post is selected"
+    );
+
+    selectedPostIds.pushObject(2);
+
+    assert.notOk(
+      controller.get("canChangeOwner"),
+      "false when moderator but more than 1 user"
     );
   });
 
@@ -416,28 +474,28 @@ discourseModule("Unit | Controller | topic", function (hooks) {
     });
     const selectedPostIds = controller.get("selectedPostIds");
 
-    assert.not(
+    assert.notOk(
       controller.get("canMergePosts"),
       "false when no posts are selected"
     );
 
     selectedPostIds.pushObject(1);
 
-    assert.not(
+    assert.notOk(
       controller.get("canMergePosts"),
       "false when only one post is selected"
     );
 
     selectedPostIds.pushObject(2);
 
-    assert.not(
+    assert.notOk(
       controller.get("canMergePosts"),
       "false when selected posts are from different users"
     );
 
     selectedPostIds.replace(1, 1, [3]);
 
-    assert.not(
+    assert.notOk(
       controller.get("canMergePosts"),
       "false when selected posts can't be deleted"
     );
@@ -545,6 +603,48 @@ discourseModule("Unit | Controller | topic", function (hooks) {
     );
   });
 
+  test("selectReplies", async function (assert) {
+    pretender.get("/posts/1/reply-ids.json", () =>
+      response([{ id: 2, level: 1 }])
+    );
+
+    let model = topicWithStream({
+      posts: [{ id: 1 }, { id: 2 }],
+    });
+
+    const controller = this.getController("topic", { model });
+
+    controller.send("selectReplies", { id: 1 });
+    await settled();
+
+    assert.strictEqual(
+      controller.get("selectedPostsCount"),
+      2,
+      "It should select two, the post and its replies"
+    );
+
+    controller.send("togglePostSelection", { id: 1 });
+    assert.strictEqual(
+      controller.get("selectedPostsCount"),
+      1,
+      "It should be selecting one only "
+    );
+    assert.strictEqual(
+      controller.get("selectedPostIds")[0],
+      2,
+      "It should be selecting the reply id "
+    );
+
+    controller.send("selectReplies", { id: 1 });
+    await settled();
+
+    assert.strictEqual(
+      controller.get("selectedPostsCount"),
+      2,
+      "It should be selecting two, even if reply was already selected"
+    );
+  });
+
   test("topVisibleChanged", function (assert) {
     let model = topicWithStream({
       posts: [{ id: 1 }],
@@ -562,9 +662,7 @@ discourseModule("Unit | Controller | topic", function (hooks) {
   });
 
   test("deletePost - no modal is shown if post does not have replies", function (assert) {
-    pretender.get("/posts/2/reply-ids.json", () => {
-      return [200, { "Content-Type": "application/json" }, []];
-    });
+    pretender.get("/posts/2/reply-ids.json", () => response([]));
 
     let destroyed;
     const post = EmberObject.create({
@@ -572,18 +670,26 @@ discourseModule("Unit | Controller | topic", function (hooks) {
       post_number: 2,
       can_delete: true,
       reply_count: 3,
-      destroy: () => {
+      destroy: async () => {
         destroyed = true;
-        return Promise.resolve();
       },
     });
 
     const currentUser = EmberObject.create({ moderator: true });
+    this.registry.register("service:current-user", currentUser, {
+      instantiate: false,
+    });
+    this.registry.injection(
+      "controller",
+      "currentUser",
+      "service:current-user"
+    );
+
     let model = topicWithStream({
       stream: [2, 3, 4],
       posts: [post, { id: 3 }, { id: 4 }],
     });
-    const controller = this.getController("topic", { model, currentUser });
+    const controller = this.getController("topic", { model });
 
     const done = assert.async();
     controller.send("deletePost", post);

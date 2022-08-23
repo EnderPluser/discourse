@@ -17,15 +17,24 @@ class SearchIndexer
     @disabled = false
   end
 
-  def self.scrub_html_for_search(html, strip_diacritics: SiteSetting.search_ignore_accents)
-    HtmlScrubber.scrub(html, strip_diacritics: strip_diacritics)
-  end
-
   def self.update_index(table: , id: , a_weight: nil, b_weight: nil, c_weight: nil, d_weight: nil)
-    raw_data = [a_weight, b_weight, c_weight, d_weight]
+    raw_data = {
+      a: a_weight,
+      b: b_weight,
+      c: c_weight,
+      d: d_weight,
+    }
 
-    search_data = raw_data.map do |data|
+    # The version used in excerpts
+    search_data = raw_data.transform_values do |data|
       Search.prepare_data(data || "", :index)
+    end
+
+    # The version used to build the index
+    indexed_data = search_data.transform_values do |data|
+      data.gsub(/\S+/) { |word|
+        word[0...SiteSetting.search_max_indexed_word_length]
+      }
     end
 
     table_name = "#{table}_search_data"
@@ -35,20 +44,13 @@ class SearchIndexer
     stemmer = table == "user" ? "simple" : Search.ts_config
 
     ranked_index = <<~SQL
-      setweight(to_tsvector('#{stemmer}', coalesce(:a,'')), 'A') ||
-      setweight(to_tsvector('#{stemmer}', coalesce(:b,'')), 'B') ||
-      setweight(to_tsvector('#{stemmer}', coalesce(:c,'')), 'C') ||
-      setweight(to_tsvector('#{stemmer}', coalesce(:d,'')), 'D')
+      setweight(to_tsvector('#{stemmer}', #{Search.wrap_unaccent("coalesce(:a,''))")}, 'A') ||
+      setweight(to_tsvector('#{stemmer}', #{Search.wrap_unaccent("coalesce(:b,''))")}, 'B') ||
+      setweight(to_tsvector('#{stemmer}', #{Search.wrap_unaccent("coalesce(:c,''))")}, 'C') ||
+      setweight(to_tsvector('#{stemmer}', #{Search.wrap_unaccent("coalesce(:d,''))")}, 'D')
     SQL
 
-    ranked_params = {
-      a: search_data[0],
-      b: search_data[1],
-      c: search_data[2],
-      d: search_data[3],
-    }
-
-    tsvector = DB.query_single("SELECT #{ranked_index}", ranked_params)[0]
+    tsvector = DB.query_single("SELECT #{ranked_index}", indexed_data)[0]
     additional_lexemes = []
 
     tsvector.scan(/'(([a-zA-Z0-9]+\.)+[a-zA-Z0-9]+)'\:([\w+,]+)/).reduce(additional_lexemes) do |array, (lexeme, _, positions)|
@@ -72,9 +74,9 @@ class SearchIndexer
 
     indexed_data =
       if table.to_s == "post"
-        clean_post_raw_data!(ranked_params[:d])
+        clean_post_raw_data!(search_data[:d])
       else
-        search_data.select { |d| d.length > 0 }.join(' ')
+        search_data.values.select { |d| d.length > 0 }.join(' ')
       end
 
     params = {
@@ -109,7 +111,7 @@ class SearchIndexer
       table: 'topic',
       id: topic_id,
       a_weight: title,
-      b_weight: scrub_html_for_search(cooked)[0...Topic::MAX_SIMILAR_BODY_LENGTH]
+      b_weight: HtmlScrubber.scrub(cooked)[0...Topic::MAX_SIMILAR_BODY_LENGTH]
     )
   end
 
@@ -120,11 +122,11 @@ class SearchIndexer
       a_weight: topic_title,
       b_weight: category_name,
       c_weight: topic_tags,
-      # Length of a tsvector must be less than 1_048_576 bytes.
-      # The difference between the max ouptut limit and imposed input limit
-      # accounts for the fact that sometimes the output tsvector may be
-      # slighlty longer than the input.
-      d_weight: scrub_html_for_search(cooked)[0..1_000_000]
+      # The tsvector resulted from parsing a string can be double the size of
+      # the original string. Since there is no way to estimate the length of
+      # the expected tsvector, we limit the input to ~50% of the maximum
+      # length of a tsvector (1_048_576 bytes).
+      d_weight: HtmlScrubber.scrub(cooked)[0..600_000]
     ) do |params|
       params["private_message"] = private_message
     end
@@ -294,12 +296,11 @@ class SearchIndexer
 
     attr_reader :scrubbed
 
-    def initialize(strip_diacritics: false)
+    def initialize
       @scrubbed = +""
-      @strip_diacritics = strip_diacritics
     end
 
-    def self.scrub(html, strip_diacritics: false)
+    def self.scrub(html)
       return +"" if html.blank?
 
       begin
@@ -328,7 +329,7 @@ class SearchIndexer
         end
       end
 
-      document.css("img[class='emoji']").each do |node|
+      document.css("img.emoji").each do |node|
         node.remove_attribute("alt")
       end
 
@@ -336,11 +337,15 @@ class SearchIndexer
         if node["href"] == node.text || MENTION_CLASSES.include?(node["class"])
           node.remove_attribute("href")
         end
+
+        if node["class"] == "anchor" && node["href"].starts_with?("#")
+          node.remove_attribute("href")
+        end
       end
 
-      me = new(strip_diacritics: strip_diacritics)
-      Nokogiri::HTML::SAX::Parser.new(me).parse(document.to_html)
-      me.scrubbed.squish
+      html_scrubber = new
+      Nokogiri::HTML::SAX::Parser.new(html_scrubber).parse(document.to_html)
+      html_scrubber.scrubbed.squish
     end
 
     MENTION_CLASSES ||= %w{mention mention-group}
@@ -362,7 +367,6 @@ class SearchIndexer
     end
 
     def characters(str)
-      str = Search.strip_diacritics(str) if @strip_diacritics
       scrubbed << " #{str} "
     end
   end

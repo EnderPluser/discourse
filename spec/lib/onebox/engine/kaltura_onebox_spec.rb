@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe Onebox::Engine::KalturaOnebox do
+RSpec.describe Onebox::Engine::KalturaOnebox do
   let(:link) { 'https://videos.kaltura.com/id/0_e2ea6ygt' }
 
   before do

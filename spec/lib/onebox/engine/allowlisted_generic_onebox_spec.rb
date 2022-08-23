@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe Onebox::Engine::AllowlistedGenericOnebox do
+RSpec.describe Onebox::Engine::AllowlistedGenericOnebox do
   describe ".===" do
     it "matches any domain" do
       expect(described_class === URI('http://foo.bar/resource')).to be(true)
@@ -92,7 +90,7 @@ describe Onebox::Engine::AllowlistedGenericOnebox do
   end
 
   describe 'canonical link' do
-    context 'uses canonical link if available' do
+    context 'when using canonical link if available' do
       let(:mobile_url) { "https://m.etsy.com/in-en/listing/87673424/personalized-word-pillow-case-letter" }
       let(:canonical_url) { "https://www.etsy.com/in-en/listing/87673424/personalized-word-pillow-case-letter" }
       before do
@@ -113,7 +111,7 @@ describe Onebox::Engine::AllowlistedGenericOnebox do
       end
     end
 
-    context 'does not use canonical link for Discourse topics' do
+    context 'when not using canonical link for Discourse topics' do
       let(:discourse_topic_url) { "https://meta.discourse.org/t/congratulations-most-stars-in-2013-github-octoverse/12483" }
       let(:discourse_topic_reply_url) { "https://meta.discourse.org/t/congratulations-most-stars-in-2013-github-octoverse/12483/2" }
       before do
@@ -166,7 +164,7 @@ describe Onebox::Engine::AllowlistedGenericOnebox do
   end
 
   describe 'missing description' do
-    context 'works without description if image is present' do
+    context 'when working without description if image is present' do
       before do
         stub_request(:get, "https://edition.cnn.com/2020/05/15/health/gallery/coronavirus-people-adopting-pets-photos/index.html")
           .to_return(status: 200, body: onebox_response('cnn'))
@@ -184,10 +182,29 @@ describe Onebox::Engine::AllowlistedGenericOnebox do
         expect(onebox.to_html).to include("People are fostering and adopting pets during the pandemic")
       end
     end
+
+    context 'when using basic meta description when necessary' do
+      before do
+        stub_request(:get, "https://www.reddit.com/r/colors/comments/b4d5xm/literally_nothing_black_edition/")
+          .to_return(status: 200, body: onebox_response('reddit_image'))
+        stub_request(:get, "https://www.example.com/content")
+          .to_return(status: 200, body: onebox_response('basic_description'))
+      end
+
+      it 'uses opengraph tags when present' do
+        onebox = described_class.new("https://www.reddit.com/r/colors/comments/b4d5xm/literally_nothing_black_edition/")
+        expect(onebox.to_html).to include("4 votes and 1 comment so far on Reddit")
+      end
+
+      it 'fallback to basic meta description if other description tags are missing' do
+        onebox = described_class.new("https://www.example.com/content")
+        expect(onebox.to_html).to include("basic meta description")
+      end
+    end
   end
 
   describe 'article html hosts' do
-    context 'returns article_html for hosts in article_html_hosts' do
+    context 'when returning article_html for hosts in article_html_hosts' do
       before do
         stub_request(:get, "https://www.imdb.com/title/tt0108002/")
           .to_return(status: 200, body: onebox_response('imdb'))
@@ -199,6 +216,16 @@ describe Onebox::Engine::AllowlistedGenericOnebox do
         expect(onebox.to_html).to include("https://m.media-amazon.com/images/M/MV5BZGUzMDU1YmQtMzBkOS00MTNmLTg5ZDQtZjY5Njk4Njk2MmRlXkEyXkFqcGdeQXVyNjc1NTYyMjg@._V1_FMjpg_UX1000_.jpg")
         expect(onebox.to_html).to include("Rudy (1993) - IMDb")
         expect(onebox.to_html).to include("Rudy: Directed by David Anspaugh. With Sean Astin, Jon Favreau, Ned Beatty, Greta Lind. Rudy has always been told that he was too small to play college football.")
+      end
+
+      it 'shows rating' do
+        onebox = described_class.new("https://www.imdb.com/title/tt0108002/")
+        expect(onebox.to_html).to include("7.5")
+      end
+
+      it 'shows duration' do
+        onebox = described_class.new("https://www.imdb.com/title/tt0108002/")
+        expect(onebox.to_html).to include("01:54")
       end
     end
   end

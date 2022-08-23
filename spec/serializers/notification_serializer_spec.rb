@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe NotificationSerializer do
+RSpec.describe NotificationSerializer do
   describe '#as_json' do
     fab!(:user) { Fabricate(:user) }
     let(:notification) { Fabricate(:notification, user: user) }

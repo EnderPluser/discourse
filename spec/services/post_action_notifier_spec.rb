@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe PostActionNotifier do
-
+RSpec.describe PostActionNotifier do
   before do
     PostActionNotifier.enable
     Jobs.run_immediately!
@@ -135,8 +132,7 @@ describe PostActionNotifier do
       expect(notification_data['revision_number']).to eq post.post_revisions.last.number
     end
 
-    context "edit notifications are disabled" do
-
+    context "when edit notifications are disabled" do
       before { SiteSetting.disable_system_edit_notifications = true }
 
       it 'notifies a user of the revision made by another user' do
@@ -150,10 +146,9 @@ describe PostActionNotifier do
           post.revise(Discourse.system_user, raw: "world is the new body of the message")
         }.not_to change(post.user.notifications, :count)
       end
-
     end
 
-    context "category edit notifications are disabled" do
+    context "when category edit notifications are disabled" do
       it 'notifies a user of the revision made by another user' do
         SiteSetting.disable_category_edit_notifications = false
 
@@ -169,10 +164,9 @@ describe PostActionNotifier do
           post.revise(evil_trout, category_id: Fabricate(:category).id)
         }.not_to change(post.user.notifications, :count)
       end
-
     end
 
-    context "tags edit notifications are disabled" do
+    context "when tags edit notifications are disabled" do
       it 'notifies a user of the revision made by another user' do
         SiteSetting.disable_tags_edit_notifications = false
 
@@ -188,7 +182,6 @@ describe PostActionNotifier do
           post.revise(evil_trout, tags: [Fabricate(:tag).name])
         }.not_to change(post.user.notifications, :count)
       end
-
     end
 
     context 'when using plugin API to add custom recipients' do
@@ -215,7 +208,7 @@ describe PostActionNotifier do
     end
   end
 
-  context 'private message' do
+  context 'with private message' do
     fab!(:user) { Fabricate(:user) }
     fab!(:mention_post) { Fabricate(:post, user: user, raw: 'Hello @eviltrout') }
     let(:topic) do
@@ -241,7 +234,7 @@ describe PostActionNotifier do
     end
   end
 
-  context 'moderator action post' do
+  context 'with moderator action post' do
     fab!(:user) { Fabricate(:user) }
     fab!(:first_post) { Fabricate(:post, user: user, raw: 'A useless post for you.') }
     let(:topic) { first_post.topic }
@@ -252,5 +245,4 @@ describe PostActionNotifier do
       }.to_not change { Notification.count }
     end
   end
-
 end

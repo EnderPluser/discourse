@@ -86,7 +86,9 @@ class PostSerializer < BasicPostSerializer
              :excerpt,
              :reviewable_id,
              :reviewable_score_count,
-             :reviewable_score_pending_count
+             :reviewable_score_pending_count,
+             :user_suspended,
+             :user_status
 
   def initialize(object, opts)
     super(object, opts)
@@ -173,7 +175,7 @@ class PostSerializer < BasicPostSerializer
   end
 
   def include_can_permanently_delete?
-    SiteSetting.can_permanently_delete && object.deleted_at
+    SiteSetting.can_permanently_delete && scope.is_admin? && object.deleted_at
   end
 
   def can_recover
@@ -256,6 +258,7 @@ class PostSerializer < BasicPostSerializer
   def reply_to_user
     {
       username: object.reply_to_user.username,
+      name: object.reply_to_user.name,
       avatar_template: object.reply_to_user.avatar_template
     }
   end
@@ -280,7 +283,7 @@ class PostSerializer < BasicPostSerializer
     result = []
     can_see_post = scope.can_see_post?(object)
 
-    PostActionType.types.except(:bookmark).each do |sym, id|
+    PostActionType.types.each do |sym, id|
       count_col = "#{sym}_count".to_sym
 
       count = object.public_send(count_col) if object.respond_to?(count_col)
@@ -368,9 +371,9 @@ class PostSerializer < BasicPostSerializer
 
   def post_bookmark
     if @topic_view.present?
-      @post_bookmark ||= @topic_view.user_post_bookmarks.find { |bookmark| bookmark.post_id == object.id && !bookmark.for_topic }
+      @post_bookmark ||= @topic_view.bookmarks.find { |bookmark| bookmark.bookmarkable == object }
     else
-      @post_bookmark ||= object.bookmarks.find_by(user: scope.user, for_topic: false)
+      @post_bookmark ||= Bookmark.find_by(user: scope.user, bookmarkable: object)
     end
   end
 
@@ -430,6 +433,11 @@ class PostSerializer < BasicPostSerializer
     return 1 if object.hidden && !scope.can_view_hidden_post_revisions?
 
     scope.is_staff? ? object.version : object.public_version
+  end
+
+  def action_code
+    return "open_topic" if object.action_code == "public_topic" && SiteSetting.login_required?
+    object.action_code
   end
 
   def include_action_code?
@@ -534,6 +542,22 @@ class PostSerializer < BasicPostSerializer
 
   def include_reviewable_score_pending_count?
     can_review_topic?
+  end
+
+  def user_suspended
+    true
+  end
+
+  def include_user_suspended?
+    object.user&.suspended?
+  end
+
+  def include_user_status?
+    SiteSetting.enable_user_status && object.user&.has_status?
+  end
+
+  def user_status
+    UserStatusSerializer.new(object.user&.user_status, root: false)
   end
 
 private

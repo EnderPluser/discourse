@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe ExportCsvController do
+RSpec.describe ExportCsvController do
   context "while logged in as normal user" do
     fab!(:user) { Fabricate(:user) }
     before { sign_in(user) }

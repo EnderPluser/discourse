@@ -11,6 +11,8 @@ class UserOption < ActiveRecord::Base
 
   after_save :update_tracked_topics
 
+  scope :human_users, -> { where('user_id > 0') }
+
   enum default_calendar: { none_selected: 0, ics: 1, google: 2 }, _scopes: false
 
   def self.ensure_consistency!
@@ -106,7 +108,7 @@ class UserOption < ActiveRecord::Base
     Discourse.redis.expire(key, delay)
 
     # delay the update
-    Jobs.enqueue_in(delay / 2, :update_top_redirection, user_id: self.user_id, redirected_at: Time.zone.now)
+    Jobs.enqueue_in(delay / 2, :update_top_redirection, user_id: self.user_id, redirected_at: Time.zone.now.to_s)
   end
 
   def should_be_redirected_to_top
@@ -198,6 +200,10 @@ class UserOption < ActiveRecord::Base
       email_messages_level == UserOption.email_level_types[:never]
   end
 
+  def likes_notifications_disabled?
+    like_notification_frequency == UserOption.like_notification_frequency_type[:never]
+  end
+
   def self.user_tzinfo(user_id)
     timezone = UserOption.where(user_id: user_id).pluck(:timezone).first || 'UTC'
 
@@ -260,6 +266,8 @@ end
 #  color_scheme_id                  :integer
 #  default_calendar                 :integer          default("none_selected"), not null
 #  oldest_search_log_date           :datetime
+#  bookmark_auto_delete_preference  :integer          default(3), not null
+#  enable_experimental_sidebar      :boolean          default(FALSE)
 #
 # Indexes
 #

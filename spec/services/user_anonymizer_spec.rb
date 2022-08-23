@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe UserAnonymizer do
+RSpec.describe UserAnonymizer do
   let(:admin) { Fabricate(:admin) }
 
   describe "event" do
@@ -23,7 +21,7 @@ describe UserAnonymizer do
     end
   end
 
-  describe "make_anonymous" do
+  describe ".make_anonymous" do
     let(:original_email) { "edward@example.net" }
     let(:user) { Fabricate(:user, username: "edward", email: original_email) }
     fab!(:another_user) { Fabricate(:evil_trout) }
@@ -67,7 +65,7 @@ describe UserAnonymizer do
       expect(user.user_option.mailing_list_mode).to eq(false)
     end
 
-    context "Site Settings do not require full name" do
+    context "when Site Settings do not require full name" do
       before do
         SiteSetting.full_name_required = false
       end
@@ -115,7 +113,7 @@ describe UserAnonymizer do
       end
     end
 
-    context "Site Settings require full name" do
+    context "when Site Settings require full name" do
       before do
         SiteSetting.full_name_required = true
       end
@@ -203,12 +201,10 @@ describe UserAnonymizer do
     it "removes external auth associations" do
       user.user_associated_accounts = [UserAssociatedAccount.create(user_id: user.id, provider_uid: "example", provider_name: "facebook")]
       user.single_sign_on_record = SingleSignOnRecord.create(user_id: user.id, external_id: "example", last_payload: "looks good")
-      user.oauth2_user_infos = [Oauth2UserInfo.create(user_id: user.id, uid: "example", provider: "example")]
       make_anonymous
       user.reload
       expect(user.user_associated_accounts).to be_empty
       expect(user.single_sign_on_record).to eq(nil)
-      expect(user.oauth2_user_infos).to be_empty
     end
 
     it "removes api key" do
@@ -229,7 +225,7 @@ describe UserAnonymizer do
       expect(user.user_api_keys).to be_empty
     end
 
-    context "executes job" do
+    context "when executing jobs" do
       before do
         Jobs.run_immediately!
       end
@@ -382,5 +378,4 @@ describe UserAnonymizer do
       expect(Invite.exists?(id: invite.id)).to eq(false)
     end
   end
-
 end

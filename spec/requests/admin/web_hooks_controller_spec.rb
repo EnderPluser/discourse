@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe Admin::WebHooksController do
+RSpec.describe Admin::WebHooksController do
 
   it 'is a subclass of AdminController' do
     expect(Admin::WebHooksController < Admin::AdminController).to eq(true)

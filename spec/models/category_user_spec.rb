@@ -1,9 +1,7 @@
 # encoding: utf-8
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe CategoryUser do
+RSpec.describe CategoryUser do
   fab!(:user) { Fabricate(:user) }
 
   def tracking
@@ -14,7 +12,7 @@ describe CategoryUser do
     CategoryUser.notification_levels[:regular]
   end
 
-  context '#batch_set' do
+  describe '#batch_set' do
     fab!(:category) { Fabricate(:category) }
 
     def category_ids_at_level(level)
@@ -100,7 +98,7 @@ describe CategoryUser do
                               notification_level: NotificationLevels.all[:regular]).exists?).to eq(true)
   end
 
-  context 'integration' do
+  describe 'integration' do
     before do
       Jobs.run_immediately!
       NotificationEmailer.enable
@@ -234,7 +232,7 @@ describe CategoryUser do
         SiteSetting.default_categories_watching = category1.id.to_s
         SiteSetting.default_categories_tracking = category2.id.to_s
         SiteSetting.default_categories_watching_first_post = category3.id.to_s
-        SiteSetting.default_categories_regular = category4.id.to_s
+        SiteSetting.default_categories_normal = category4.id.to_s
         SiteSetting.default_categories_muted = category5.id.to_s
       end
       it "every category from the default_categories_* site settings get overridden to regular, except for muted" do
@@ -265,6 +263,64 @@ describe CategoryUser do
         expect(levels[category4.id]).to eq(CategoryUser.notification_levels[:regular])
         expect(levels[category5.id]).to eq(CategoryUser.notification_levels[:muted])
         expect(levels.key?(category6.id)).to eq(false)
+      end
+    end
+  end
+
+  describe ".muted_category_ids" do
+    context "with max category nesting 2" do
+      fab!(:category1) { Fabricate(:category) }
+      fab!(:category2) { Fabricate(:category, parent_category: category1) }
+      fab!(:category3) { Fabricate(:category, parent_category: category1) }
+
+      it "calculates muted categories based on parent category state" do
+        expect(CategoryUser.indirectly_muted_category_ids(user)).to eq([])
+        expect(CategoryUser.muted_category_ids(user)).to eq([])
+
+        category_user = CategoryUser.create!(user: user, category: category1, notification_level: CategoryUser.notification_levels[:muted])
+        expect(CategoryUser.indirectly_muted_category_ids(user)).to contain_exactly(category2.id, category3.id)
+        expect(CategoryUser.muted_category_ids(user)).to contain_exactly(category1.id, category2.id, category3.id)
+
+        CategoryUser.create!(user: user, category: category3, notification_level: CategoryUser.notification_levels[:muted])
+        expect(CategoryUser.indirectly_muted_category_ids(user)).to contain_exactly(category2.id)
+        expect(CategoryUser.muted_category_ids(user)).to contain_exactly(category1.id, category2.id, category3.id)
+
+        category_user.update!(notification_level: CategoryUser.notification_levels[:regular])
+        expect(CategoryUser.indirectly_muted_category_ids(user)).to eq([])
+        expect(CategoryUser.muted_category_ids(user)).to contain_exactly(category3.id)
+      end
+    end
+
+    context "with max category nesting 3" do
+      let(:category1) { Fabricate(:category) }
+      let(:category2) { Fabricate(:category, parent_category: category1) }
+      let(:category3) { Fabricate(:category, parent_category: category2) }
+
+      before do
+        SiteSetting.max_category_nesting = 3
+        category1
+        category2
+        category3
+      end
+      it "calculates muted categories based on parent category state" do
+        expect(CategoryUser.indirectly_muted_category_ids(user)).to eq([])
+
+        CategoryUser.create!(user: user, category: category1, notification_level: CategoryUser.notification_levels[:muted])
+        expect(CategoryUser.indirectly_muted_category_ids(user)).to contain_exactly(category2.id, category3.id)
+        expect(CategoryUser.muted_category_ids(user)).to contain_exactly(category1.id, category2.id, category3.id)
+
+        category_user3 = CategoryUser.create!(user: user, category: category3, notification_level: CategoryUser.notification_levels[:muted])
+        expect(CategoryUser.indirectly_muted_category_ids(user)).to contain_exactly(category2.id)
+        expect(CategoryUser.muted_category_ids(user)).to contain_exactly(category1.id, category2.id, category3.id)
+
+        category_user3.destroy!
+        category_user2 = CategoryUser.create!(user: user, category: category2, notification_level: CategoryUser.notification_levels[:muted])
+        expect(CategoryUser.indirectly_muted_category_ids(user)).to contain_exactly(category3.id)
+        expect(CategoryUser.muted_category_ids(user)).to contain_exactly(category1.id, category2.id, category3.id)
+
+        category_user2.update!(notification_level: CategoryUser.notification_levels[:regular])
+        expect(CategoryUser.indirectly_muted_category_ids(user)).to eq([])
+        expect(CategoryUser.muted_category_ids(user)).to contain_exactly(category1.id)
       end
     end
   end

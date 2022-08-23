@@ -1,9 +1,7 @@
 # encoding: utf-8
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe TagUser do
+RSpec.describe TagUser do
   before do
     SiteSetting.tagging_enabled = true
     SiteSetting.min_trust_to_create_tag = 0
@@ -22,7 +20,7 @@ describe TagUser do
     TagUser.notification_levels[:watching]
   end
 
-  context "notification_level_visible" do
+  describe "notification_level_visible" do
     let!(:tag1) { Fabricate(:tag) }
     let!(:tag2) { Fabricate(:tag) }
     let!(:tag3) { Fabricate(:tag) }
@@ -40,12 +38,10 @@ describe TagUser do
 
     it "scopes to notification levels visible by tag group permission" do
       group1 = Fabricate(:group)
-      tag_group1 = Fabricate(:tag_group, tags: [tag1])
-      Fabricate(:tag_group_permission, tag_group: tag_group1, group: group1)
+      tag_group1 = Fabricate(:tag_group, tags: [tag1], permissions: { group1.name => 1 })
 
       group2 = Fabricate(:group)
-      tag_group2 = Fabricate(:tag_group, tags: [tag2])
-      Fabricate(:tag_group_permission, tag_group: tag_group2, group: group2)
+      tag_group2 = Fabricate(:tag_group, tags: [tag2], permissions: { group2.name => 1 })
 
       Fabricate(:group_user, group: group1, user: user1)
 
@@ -56,8 +52,7 @@ describe TagUser do
 
     it "scopes to notification levels visible because user is staff" do
       group2 = Fabricate(:group)
-      tag_group2 = Fabricate(:tag_group, tags: [tag2])
-      Fabricate(:tag_group_permission, tag_group: tag_group2, group: group2)
+      tag_group2 = Fabricate(:tag_group, tags: [tag2], permissions: { group2.name => 1 })
 
       staff_group = Group.find(Group::AUTO_GROUPS[:staff])
       Fabricate(:group_user, group: staff_group, user: user1)
@@ -74,7 +69,7 @@ describe TagUser do
     end
   end
 
-  context "change" do
+  describe "change" do
     it "watches or tracks on change" do
       user = Fabricate(:user)
       tag = Fabricate(:tag)
@@ -116,7 +111,7 @@ describe TagUser do
     end
   end
 
-  context "batch_set" do
+  describe "batch_set" do
     it "watches and unwatches tags correctly" do
 
       user = Fabricate(:user)
@@ -165,7 +160,7 @@ describe TagUser do
     end
   end
 
-  context "integration" do
+  describe "integration" do
     fab!(:user) { Fabricate(:user) }
     fab!(:watched_tag) { Fabricate(:tag) }
     let(:muted_tag)   { Fabricate(:tag) }
@@ -187,6 +182,11 @@ describe TagUser do
       end
 
       it "sets notification levels correctly" do
+
+        # define a wide open tag group to ensure it also works
+        group = TagGroup.new(name: 'Visible & usable by everyone', tag_names: [watched_tag.name])
+        group.permissions = [[Group::AUTO_GROUPS[:everyone], TagGroupPermission.permission_types[:full]]]
+        group.save!
 
         expect(Notification.where(user_id: user.id, topic_id: watched_post.topic_id).count).to eq 1
         expect(Notification.where(user_id: user.id, topic_id: tracked_post.topic_id).count).to eq 0
@@ -330,8 +330,7 @@ describe TagUser do
 
       it "does not show a tag is tracked if the user does not belong to the tag group with permissions" do
         group = Fabricate(:group)
-        tag_group = Fabricate(:tag_group, tags: [tag2])
-        Fabricate(:tag_group_permission, tag_group: tag_group, group: group)
+        tag_group = Fabricate(:tag_group, tags: [tag2], permissions: { group.name => 1 })
 
         expect(TagUser.notification_levels_for(user).keys).to match_array([tag1.name, tag3.name, tag4.name])
       end

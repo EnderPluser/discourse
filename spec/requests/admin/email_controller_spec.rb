@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Admin::EmailController do
+RSpec.describe Admin::EmailController do
   fab!(:admin) { Fabricate(:admin) }
   fab!(:email_log) { Fabricate(:email_log) }
 
@@ -85,6 +83,23 @@ describe Admin::EmailController do
         expect(logs.size).to eq(1)
         expect(logs.first["reply_key"]).to eq(post_reply_key_2.reply_key)
       end
+    end
+
+    it 'should be able to filter by smtp_transaction_response' do
+      email_log_2 = Fabricate(:email_log, smtp_transaction_response: <<~RESPONSE)
+      250 Ok: queued as pYoKuQ1aUG5vdpgh-k2K11qcpF4C1ZQ5qmvmmNW25SM=@mailhog.example
+      RESPONSE
+
+      get "/admin/email/sent.json", params: {
+        smtp_transaction_response: "pYoKu"
+      }
+
+      expect(response.status).to eq(200)
+
+      logs = response.parsed_body
+
+      expect(logs.size).to eq(1)
+      expect(logs.first["smtp_transaction_response"]).to eq(email_log_2.smtp_transaction_response)
     end
   end
 
@@ -216,7 +231,7 @@ describe Admin::EmailController do
         post "/admin/email/handle_mail.json", params: { email: email('cc') }
       end
       expect(response.status).to eq(200)
-      expect(response.body).to eq("warning: the email parameter is deprecated. all POST requests to this route should be sent with a base64 strict encoded encoded_email parameter instead. email has been received and is queued for processing")
+      expect(response.body).to eq("warning: the email parameter is deprecated. all POST requests to this route should be sent with a base64 strict encoded email_encoded parameter instead. email has been received and is queued for processing")
     end
 
     it 'should enqueue the right job, decoding the raw email param' do
@@ -274,7 +289,7 @@ describe Admin::EmailController do
       expect(json["errors"]).to include("Discourse::InvalidParameters")
     end
 
-    context 'bounced email log entry exists' do
+    context 'when bounced email log entry exists' do
       fab!(:email_log) { Fabricate(:email_log, bounced: true, bounce_key: SecureRandom.hex) }
       let(:error_message) { "Email::Receiver::BouncedEmailError" }
 
@@ -299,6 +314,21 @@ describe Admin::EmailController do
                   is_bounce: true,
                   error: error_message,
                   to_addresses: SiteSetting.notification_email.sub("@", "+verp-#{email_log.bounce_key}@")
+        )
+
+        get "/admin/email/incoming_from_bounced/#{email_log.id}.json"
+        expect(response.status).to eq(200)
+
+        json = response.parsed_body
+        expect(json["error"]).to eq(error_message)
+      end
+
+      it 'returns an incoming email sent to the notification_email address' do
+        SiteSetting.reply_by_email_address = "replies+%{reply_key}@subdomain.example.com"
+        Fabricate(:incoming_email,
+                  is_bounce: true,
+                  error: error_message,
+                  to_addresses: "subdomain+verp-#{email_log.bounce_key}@example.com"
         )
 
         get "/admin/email/incoming_from_bounced/#{email_log.id}.json"

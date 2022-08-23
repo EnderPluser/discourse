@@ -160,37 +160,68 @@ module JsLocaleHelper
     result
   end
 
-  def self.output_client_overrides(locale)
-    translations = (I18n.overrides_by_locale(locale) || {}).select { |k, _| k[/^(admin_js|js)\./] }
-    return "" if translations.blank?
+  def self.output_client_overrides(main_locale)
+    all_overrides = {}
+    has_overrides = false
 
-    message_formats = {}
+    I18n.fallbacks[main_locale].each do |locale|
+      overrides = all_overrides[locale] = TranslationOverride
+        .where(locale: locale)
+        .where("translation_key LIKE 'js.%' OR translation_key LIKE 'admin_js.%'")
+        .pluck(:translation_key, :value, :compiled_js)
 
-    translations.delete_if do |key, value|
-      if key.to_s.end_with?("_MF")
-        message_formats[key] = value
-      end
+      has_overrides ||= overrides.present?
     end
 
-    message_formats = message_formats.map { |k, v| "#{k.inspect}: #{v}" }.join(", ")
+    return "" if !has_overrides
 
-    <<~JS
-      I18n._mfOverrides = {#{message_formats}};
-      I18n._overrides = #{translations.to_json};
-    JS
+    result = +"I18n._overrides = {};"
+    existing_keys = Set.new
+    message_formats = []
+
+    all_overrides.each do |locale, overrides|
+      translations = {}
+
+      overrides.each do |key, value, compiled_js|
+        next if existing_keys.include?(key)
+        existing_keys << key
+
+        if key.end_with?("_MF")
+          message_formats << "#{key.inspect}: #{compiled_js}"
+        else
+          translations[key] = value
+        end
+      end
+
+      result << "I18n._overrides['#{locale}'] = #{translations.to_json};" if translations.present?
+    end
+
+    result << "I18n._mfOverrides = {#{message_formats.join(", ")}};"
+    result
   end
 
   def self.output_extra_locales(bundle, locale)
     translations = translations_for(locale)
+    locales = translations.keys
 
-    translations.keys.each do |l|
+    locales.each do |l|
       translations[l].keys.each do |k|
         bundle_translations = translations[l].delete(k)
         translations[l].deep_merge!(bundle_translations) if k == bundle
       end
     end
 
-    translations.present? ? "I18n.extras = #{translations.to_json};" : ""
+    return "" if translations.blank?
+
+    output = +"if (!I18n.extras) { I18n.extras = {}; }"
+    locales.each do |l|
+      output << <<~JS
+        if (!I18n.extras["#{l}"]) { I18n.extras["#{l}"] = {}; }
+        Object.assign(I18n.extras["#{l}"], #{translations[l].to_json});
+      JS
+    end
+
+    output
   end
 
   MOMENT_LOCALE_MAPPING ||= {
@@ -269,6 +300,13 @@ module JsLocaleHelper
     result = +"MessageFormat = {locale: {}};\n"
     result << "I18n._compiledMFs = {#{formats}};\n"
     result << File.read(filename) << "\n"
+
+    if locale != "en"
+      # Include "en" pluralization rules for use in fallbacks
+      _, en_filename = find_message_format_locale(["en"], fallback_to_english: false)
+      result << File.read(en_filename) << "\n"
+    end
+
     result << File.read("#{Rails.root}/lib/javascripts/messageformat-lookup.js") << "\n"
   end
 

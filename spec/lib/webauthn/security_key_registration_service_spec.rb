@@ -1,9 +1,8 @@
 # frozen_string_literal: true
-require 'rails_helper'
 require 'webauthn'
 require 'webauthn/security_key_registration_service'
 
-describe Webauthn::SecurityKeyRegistrationService do
+RSpec.describe Webauthn::SecurityKeyRegistrationService do
   let(:client_data_challenge) { Base64.encode64(challenge) }
   let(:client_data_webauthn_type) { 'webauthn.create' }
   let(:client_data_origin) { 'http://localhost:3000' }

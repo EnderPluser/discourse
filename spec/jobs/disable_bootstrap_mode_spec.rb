@@ -1,10 +1,8 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
+RSpec.describe Jobs::DisableBootstrapMode do
 
-describe Jobs::DisableBootstrapMode do
-
-  context '.execute' do
+  describe '.execute' do
     fab!(:admin) { Fabricate(:admin) }
 
     before do

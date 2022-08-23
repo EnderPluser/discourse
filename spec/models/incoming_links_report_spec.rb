@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe IncomingLinksReport do
+RSpec.describe IncomingLinksReport do
 
   before do
     freeze_time DateTime.parse('2010-01-01 6:00')

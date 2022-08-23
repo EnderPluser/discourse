@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe BackupRestore::Backuper do
+RSpec.describe BackupRestore::Backuper do
   it 'returns a non-empty parameterized title when site title contains unicode' do
     SiteSetting.title = 'Ɣ'
     backuper = BackupRestore::Backuper.new(Discourse.system_user.id)
@@ -31,7 +29,7 @@ describe BackupRestore::Backuper do
 
         expect { backuper.send(:notify_user) }
           .to change { Topic.private_messages.count }.by(1)
-          .and change { Upload.count }.by(0)
+          .and not_change { Upload.count }
       end
 
       expect(Topic.last.first_post.raw).to include("```text\n[2010-01-01 12:00:00] Notifying 'system' of the end of the backup...\n```")
@@ -41,7 +39,7 @@ describe BackupRestore::Backuper do
       SiteSetting.max_post_length = 250
 
       silence_stdout do
-        backuper = silence_stdout { BackupRestore::Backuper.new(Discourse.system_user.id) }
+        backuper = BackupRestore::Backuper.new(Discourse.system_user.id)
 
         expect { backuper.send(:notify_user) }
           .to change { Topic.private_messages.count }.by(1)
@@ -65,7 +63,7 @@ describe BackupRestore::Backuper do
 
         expect { backuper.send(:notify_user) }
           .to change { Topic.private_messages.count }.by(1)
-          .and change { Upload.count }.by(0)
+          .and not_change { Upload.count }
       end
 
       expect(Topic.last.first_post.raw).to include("```text\n...\n[2010-01-01 12:00:00] Line 10\n[2010-01-01 12:00:00] Notifying 'system' of the end of the backup...\n```")

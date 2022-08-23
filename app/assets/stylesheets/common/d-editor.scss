@@ -10,17 +10,22 @@
   min-height: 0;
 }
 
-.d-editor-textarea-wrapper,
-.d-editor-preview-wrapper {
+.d-editor-textarea-column {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .d-editor-textarea-wrapper {
   display: flex;
+  flex: 1;
   flex-direction: column;
   background-color: var(--secondary);
   position: relative;
-  border: 1px solid var(--primary-low);
+  border: 1px solid var(--primary-medium);
+  min-height: 0;
 
   textarea {
     background: transparent;
@@ -44,13 +49,10 @@
 }
 
 .d-editor-preview-wrapper {
-  max-width: 49%;
-  margin-left: 1%;
   display: flex;
+  flex: 1;
   flex-direction: column;
-}
-
-.d-editor-preview-wrapper {
+  margin-left: 16px;
   overflow: auto;
   cursor: default;
   -webkit-overflow-scrolling: touch;
@@ -198,7 +200,8 @@
 
     .scale-btn-container,
     .alt-text-readonly-container,
-    .alt-text-edit-container {
+    .alt-text-edit-container,
+    .delete-image-button {
       background: var(--secondary);
       display: flex;
       height: var(--resizer-height);
@@ -243,6 +246,7 @@
 
       .alt-text-edit-btn {
         cursor: pointer;
+        color: var(--tertiary);
 
         svg {
           padding-right: 0.5em;
@@ -280,6 +284,15 @@
       }
     }
 
+    .delete-image-button {
+      cursor: pointer;
+      color: var(--danger);
+
+      .d-icon-trash-alt {
+        margin-left: 0.5em;
+      }
+    }
+
     svg {
       pointer-events: none;
     }
@@ -297,8 +310,12 @@
   border-bottom: 1px solid var(--primary-low);
   width: 100%;
   box-sizing: border-box;
-  padding-left: 2px;
-  padding-right: 2px;
+
+  html:not(.keyboard-visible) & {
+    overflow-x: auto; // hiding overflow breaks the cog menu on iPad and mobile
+  }
+
+  flex-shrink: 0;
 
   .d-editor-spacer {
     height: 1em;

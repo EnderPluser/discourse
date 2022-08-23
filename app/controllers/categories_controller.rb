@@ -2,9 +2,9 @@
 
 class CategoriesController < ApplicationController
 
-  requires_login except: [:index, :categories_and_latest, :categories_and_top, :show, :redirect, :find_by_slug]
+  requires_login except: [:index, :categories_and_latest, :categories_and_top, :show, :redirect, :find_by_slug, :visible_groups]
 
-  before_action :fetch_category, only: [:show, :update, :destroy]
+  before_action :fetch_category, only: [:show, :update, :destroy, :visible_groups]
   before_action :initialize_staff_action_logger, only: [:create, :update, :destroy]
   skip_before_action :check_xhr, only: [:index, :categories_and_latest, :categories_and_top, :redirect]
 
@@ -23,11 +23,15 @@ class CategoriesController < ApplicationController
 
     parent_category = Category.find_by_slug(params[:parent_category_id]) || Category.find_by(id: params[:parent_category_id].to_i)
 
+    include_subcategories = SiteSetting.desktop_category_page_style == "subcategories_with_featured_topics" ||
+      params[:include_subcategories] == "true"
+
     category_options = {
       is_homepage: current_homepage == "categories",
       parent_category_id: params[:parent_category_id],
       include_topics: include_topics(parent_category),
-      include_subcategories: params[:include_subcategories] == "true"
+      include_subcategories: include_subcategories,
+      tag: params[:tag]
     }
 
     @category_list = CategoryList.new(guardian, category_options)
@@ -45,10 +49,14 @@ class CategoriesController < ApplicationController
         style = SiteSetting.desktop_category_page_style
         topic_options = {
           per_page: CategoriesController.topics_per_page,
-          no_definitions: true
+          no_definitions: true,
         }
 
-        if style == "categories_and_latest_topics"
+        if style == "categories_and_latest_topics_created_date"
+          topic_options[:order] = 'created'
+          @topic_list = TopicQuery.new(current_user, topic_options).list_latest
+          @topic_list.more_topics_url = url_for(public_send("latest_path", sort: :created))
+        elsif style == "categories_and_latest_topics"
           @topic_list = TopicQuery.new(current_user, topic_options).list_latest
           @topic_list.more_topics_url = url_for(public_send("latest_path"))
         elsif style == "categories_and_top_topics"
@@ -117,6 +125,7 @@ class CategoriesController < ApplicationController
     if Category.topic_create_allowed(guardian).where(id: @category.id).exists?
       @category.permission = CategoryGroup.permission_types[:full]
     end
+
     render_serialized(@category, CategorySerializer)
   end
 
@@ -211,7 +220,7 @@ class CategoriesController < ApplicationController
     notification_level = params[:notification_level].to_i
 
     CategoryUser.set_notification_level_for_category(current_user, notification_level, category_id)
-    render json: success_json
+    render json: success_json.merge({ indirectly_muted_category_ids: CategoryUser.indirectly_muted_category_ids(current_user) })
   end
 
   def destroy
@@ -249,6 +258,16 @@ class CategoriesController < ApplicationController
     render_serialized(@category, CategorySerializer)
   end
 
+  def visible_groups
+    @guardian.ensure_can_see!(@category)
+
+    groups = if !@category.groups.exists?(id: Group::AUTO_GROUPS[:everyone])
+      @category.groups.merge(Group.visible_groups(current_user)).pluck("name")
+    end
+
+    render json: success_json.merge(groups: groups || [])
+  end
+
   private
 
   def self.topics_per_page
@@ -270,8 +289,10 @@ class CategoriesController < ApplicationController
 
     topic_options = {
       per_page: CategoriesController.topics_per_page,
-      no_definitions: true
+      no_definitions: true,
     }
+    style = SiteSetting.desktop_category_page_style
+    topic_options[:order] = 'created' if style == "categories_and_latest_topics_created_date"
 
     result = CategoryAndTopicLists.new
     result.category_list = CategoryList.new(guardian, category_options)
@@ -309,7 +330,7 @@ class CategoriesController < ApplicationController
       if SiteSetting.tagging_enabled
         params[:allowed_tags] = params[:allowed_tags].presence || [] if params[:allowed_tags]
         params[:allowed_tag_groups] = params[:allowed_tag_groups].presence || [] if params[:allowed_tag_groups]
-        params[:required_tag_group_name] = params[:required_tag_group_name].presence || '' if params[:required_tag_group_name]
+        params[:required_tag_groups] = params[:required_tag_groups].presence || [] if params[:required_tag_groups]
       end
 
       if SiteSetting.enable_category_group_moderation?
@@ -348,23 +369,36 @@ class CategoriesController < ApplicationController
         :navigate_to_first_post_after_read,
         :search_priority,
         :allow_global_tags,
-        :required_tag_group_name,
-        :min_tags_from_required_group,
         :read_only_banner,
         :default_list_filter,
         :reviewable_by_group_id,
-        custom_fields: [params[:custom_fields].try(:keys)],
+        custom_fields: [custom_field_params],
         permissions: [*p.try(:keys)],
         allowed_tags: [],
         allowed_tag_groups: [],
+        required_tag_groups: [:name, :min_count]
       )
+
+      if result[:required_tag_groups] && !result[:required_tag_groups].is_a?(Array)
+        raise Discourse::InvalidParameters.new(:required_tag_groups)
+      end
 
       result
     end
   end
 
+  def custom_field_params
+    keys = params[:custom_fields].try(:keys)
+    return if keys.blank?
+
+    keys.map do |key|
+      params[:custom_fields][key].is_a?(Array) ? { key => [] } : key
+    end
+  end
+
   def fetch_category
     @category = Category.find_by_slug(params[:id]) || Category.find_by(id: params[:id].to_i)
+    raise Discourse::NotFound if @category.blank?
   end
 
   def initialize_staff_action_logger
@@ -377,6 +411,7 @@ class CategoriesController < ApplicationController
       params[:include_topics] ||
       (parent_category && parent_category.subcategory_list_includes_topics?) ||
       style == "categories_with_featured_topics" ||
+      style == "subcategories_with_featured_topics" ||
       style == "categories_boxes_with_topics" ||
       style == "categories_with_top_topics"
   end

@@ -7,20 +7,21 @@ class PostActionCreator
 
   # Shortcut methods for easier invocation
   class << self
-    def create(created_by, post, action_key, message: nil, created_at: nil, reason: nil)
+    def create(created_by, post, action_key, message: nil, created_at: nil, reason: nil, silent: false)
       new(
         created_by,
         post,
         PostActionType.types[action_key],
         message: message,
         created_at: created_at,
-        reason: reason
+        reason: reason,
+        silent: silent
       ).perform
     end
 
-    [:like, :off_topic, :spam, :inappropriate, :bookmark].each do |action|
-      define_method(action) do |created_by, post|
-        create(created_by, post, action)
+    [:like, :off_topic, :spam, :inappropriate].each do |action|
+      define_method(action) do |created_by, post, silent = false|
+        create(created_by, post, action, silent: silent)
       end
     end
     [:notify_moderators, :notify_user].each do |action|
@@ -40,7 +41,8 @@ class PostActionCreator
     flag_topic: false,
     created_at: nil,
     queue_for_review: false,
-    reason: nil
+    reason: nil,
+    silent: false
   )
     @created_by = created_by
     @created_at = created_at || Time.zone.now
@@ -62,6 +64,8 @@ class PostActionCreator
     if reason.nil? && @queue_for_review
       @reason = 'queued_by_staff'
     end
+
+    @silent = silent
   end
 
   def post_can_act?
@@ -113,7 +117,7 @@ class PostActionCreator
         create_reviewable(result)
         enforce_rules
         UserActionManager.post_action_created(post_action)
-        PostActionNotifier.post_action_created(post_action)
+        PostActionNotifier.post_action_created(post_action) if !@silent
         notify_subscribers
 
         # agree with other flags
@@ -157,7 +161,7 @@ private
 
   def notify_subscribers
     if @post_action_name == :like
-      @post.publish_change_to_clients! :liked, { likes_count: @post.like_count + 1 }
+      @post.publish_change_to_clients! :liked, { likes_count: @post.like_count + 1, user_id: @created_by.id }
     elsif self.class.notify_types.include?(@post_action_name)
       @post.publish_change_to_clients! :acted
     end
@@ -281,7 +285,6 @@ private
     post_action
   rescue ActiveRecord::RecordNotUnique
     # can happen despite being .create
-    # since already bookmarked
     PostAction.where(where_attrs).first
   end
 

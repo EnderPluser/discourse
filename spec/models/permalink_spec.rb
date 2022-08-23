@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe Permalink do
+RSpec.describe Permalink do
 
   describe "normalization" do
     it "correctly normalizes" do

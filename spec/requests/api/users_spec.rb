@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 require 'swagger_helper'
 
-describe 'users' do
+RSpec.describe 'users' do
 
   let(:'Api-Key') { Fabricate(:api_key).key }
   let(:'Api-Username') { 'system' }
@@ -64,6 +64,32 @@ describe 'users' do
         schema expected_response_schema
 
         let(:username) { Fabricate(:user).username }
+
+        it_behaves_like "a JSON endpoint", 200 do
+          let(:expected_response_schema) { expected_response_schema }
+          let(:expected_request_schema) { expected_request_schema }
+        end
+      end
+    end
+
+    put 'Update a user' do
+      tags 'Users'
+      operationId 'updateUser'
+      consumes 'application/json'
+
+      parameter name: 'Api-Key', in: :header, type: :string, required: true
+      parameter name: 'Api-Username', in: :header, type: :string, required: true
+      expected_request_schema = load_spec_schema('user_update_request')
+      parameter name: :username, in: :path, type: :string, required: true
+      parameter name: :params, in: :body, schema: expected_request_schema
+
+      produces 'application/json'
+      response '200', 'user updated' do
+        expected_response_schema = load_spec_schema('user_update_response')
+        schema expected_response_schema
+
+        let(:username) { Fabricate(:user).username }
+        let(:params) { { 'name' => 'user' } }
 
         it_behaves_like "a JSON endpoint", 200 do
           let(:expected_response_schema) { expected_response_schema }
@@ -176,7 +202,6 @@ describe 'users' do
   end
 
   path '/u/{username}/preferences/email.json' do
-
     put 'Update email' do
       tags 'Users'
       operationId 'updateEmail'
@@ -201,7 +226,33 @@ describe 'users' do
         end
       end
     end
+  end
 
+  path '/u/{username}/preferences/username.json' do
+    put 'Update username' do
+      tags 'Users'
+      operationId 'updateUsername'
+      consumes 'application/json'
+      expected_request_schema = load_spec_schema('user_update_username_request')
+
+      parameter name: :username, in: :path, type: :string, required: true
+      parameter name: :params, in: :body, schema: expected_request_schema
+
+      produces 'application/json'
+      response '200', 'username updated' do
+
+        let(:user) { Fabricate(:user) }
+        let(:username) { user.username }
+        let(:params) { { 'new_username' => "#{user.username}1" } }
+
+        expected_response_schema = nil
+
+        it_behaves_like "a JSON endpoint", 200 do
+          let(:expected_response_schema) { expected_response_schema }
+          let(:expected_request_schema) { expected_request_schema }
+        end
+      end
+    end
   end
 
   path '/directory_items.json' do
@@ -339,6 +390,33 @@ describe 'users' do
         } }
 
         expected_response_schema = load_spec_schema('user_suspend_response')
+        schema(expected_response_schema)
+
+        it_behaves_like "a JSON endpoint", 200 do
+          let(:expected_response_schema) { expected_response_schema }
+          let(:expected_request_schema) { expected_request_schema }
+        end
+      end
+    end
+  end
+
+  path '/admin/users/{id}/silence.json' do
+    put 'Silence a user' do
+      tags 'Users', 'Admin'
+      operationId 'silenceUser'
+      consumes 'application/json'
+      expected_request_schema = load_spec_schema('user_silence_request')
+
+      parameter name: :id, in: :path, type: :integer, required: true
+      parameter name: :params, in: :body, schema: expected_request_schema
+
+      produces 'application/json'
+      response '200', 'response' do
+
+        let(:id) { Fabricate(:user).id }
+        let(:params) {}
+
+        expected_response_schema = load_spec_schema('user_silence_response')
         schema(expected_response_schema)
 
         it_behaves_like "a JSON endpoint", 200 do

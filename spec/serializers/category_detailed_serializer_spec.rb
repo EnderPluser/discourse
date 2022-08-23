@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe CategoryDetailedSerializer do
+RSpec.describe CategoryDetailedSerializer do
 
   describe "counts" do
     it "works for categories with no subcategories" do

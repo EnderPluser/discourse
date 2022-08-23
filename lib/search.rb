@@ -21,13 +21,6 @@ class Search
     5
   end
 
-  def self.strip_diacritics(str)
-    s = str.unicode_normalize(:nfkd)
-    s.gsub!(DIACRITICS, "")
-    s.strip!
-    s
-  end
-
   def self.per_filter
     50
   end
@@ -64,9 +57,21 @@ class Search
     end
   end
 
-  def self.segment_cjk?
-    ['zh_TW', 'zh_CN', 'ja'].include?(SiteSetting.default_locale) ||
-      SiteSetting.search_tokenize_chinese_japanese_korean
+  def self.wrap_unaccent(str)
+    SiteSetting.search_ignore_accents ? "unaccent(#{str})" : str
+  end
+
+  def self.segment_chinese?
+    ['zh_TW', 'zh_CN'].include?(SiteSetting.default_locale) || SiteSetting.search_tokenize_chinese
+  end
+
+  def self.segment_japanese?
+    SiteSetting.default_locale == "ja" || SiteSetting.search_tokenize_japanese
+  end
+
+  def self.japanese_punctuation_regexp
+    # Regexp adapted from https://github.com/6/tiny_segmenter/blob/15a5b825993dfd2c662df3766f232051716bef5b/lib/tiny_segmenter.rb#L7
+    @japanese_punctuation_regexp ||= Regexp.compile("[-–—―.。・（）()［］｛｝{}【】⟨⟩、､,，،…‥〽「」『』〜~！!：:？?\"'|_＿“”‘’;/⁄／«»]")
   end
 
   def self.prepare_data(search_data, purpose = nil)
@@ -74,29 +79,38 @@ class Search
     data.force_encoding("UTF-8")
 
     if purpose != :topic
-      # TODO cppjieba_rb is designed for chinese, we need something else for Japanese
-      # Korean appears to be safe cause words are already space separated
-      # For Japanese we should investigate using kakasi
-      if segment_cjk?
+      if segment_chinese?
         require 'cppjieba_rb' unless defined? CppjiebaRb
-        data = CppjiebaRb.segment(search_data, mode: :mix)
 
-        # TODO: we still want to tokenize here but the current stopword list is too wide
-        # in cppjieba leading to words such as volume to be skipped. PG already has an English
-        # stopword list so use that vs relying on cppjieba
-        if ts_config != 'english'
-          data = CppjiebaRb.filter_stop_word(data)
-        else
-          data = data.filter { |s| s.present? }
+        segmented_data = []
+
+        # We need to split up the string here because Cppjieba has a bug where text starting with numeric chars will
+        # be split into two segments. For example, '123abc' becomes '123' and 'abc' after segmentation.
+        data.scan(/(?<chinese>[\p{Han}。,、“”《》…\.:?!;()]+)|([^\p{Han}]+)/) do
+          match_data = $LAST_MATCH_INFO
+
+          if match_data[:chinese]
+            segments = CppjiebaRb.segment(match_data.to_s, mode: :mix)
+
+            if ts_config != 'english'
+              segments = CppjiebaRb.filter_stop_word(segments)
+            end
+
+            segments = segments.filter { |s| s.present? }
+            segmented_data << segments.join(' ')
+          else
+            segmented_data << match_data.to_s.squish
+          end
         end
 
+        data = segmented_data.join(' ')
+      elsif segment_japanese?
+        data.gsub!(japanese_punctuation_regexp, " ")
+        data = TinyJapaneseSegmenter.segment(data)
+        data = data.filter { |s| s.present? }
         data = data.join(' ')
       else
         data.squish!
-      end
-
-      if SiteSetting.search_ignore_accents
-        data = strip_diacritics(data)
       end
     end
 
@@ -222,12 +236,13 @@ class Search
       term: clean_term,
       blurb_term: term,
       search_context: @search_context,
-      blurb_length: @blurb_length
+      blurb_length: @blurb_length,
+      is_header_search: !use_full_page_limit
     )
   end
 
   def limit
-    if @opts[:type_filter].present? && @opts[:type_filter] != "exclude_topics"
+    if use_full_page_limit
       Search.per_filter + 1
     else
       Search.per_facet + 1
@@ -244,6 +259,10 @@ class Search
 
   def valid?
     @valid
+  end
+
+  def use_full_page_limit
+    @opts[:search_type] == :full_page || Topic === @search_context
   end
 
   def self.execute(term, opts = nil)
@@ -263,7 +282,7 @@ class Search
     end
 
     unless @filters.present? || @opts[:search_for_id]
-      min_length = @opts[:min_search_term_length] || SiteSetting.min_search_term_length
+      min_length = min_search_term_length
       terms = (@term || '').split(/\s(?=(?:[^"]|"[^"]*")*$)/).reject { |t| t.length < min_length }
 
       if terms.blank?
@@ -439,9 +458,18 @@ class Search
     end
   end
 
+  # NOTE: With polymorphic bookmarks it may make sense to possibly expand
+  # this at some point, as it only acts on posts at the moment. On the other
+  # hand, this may not be necessary, as the user bookmark list has advanced
+  # search based on a RegisteredBookmarkable's #search_query method.
   advanced_filter(/^in:(bookmarks)$/i) do |posts, match|
     if @guardian.user
-      posts.where("posts.id IN (SELECT post_id FROM bookmarks WHERE bookmarks.user_id = #{@guardian.user.id})")
+      posts.where(<<~SQL)
+        posts.id IN (
+          SELECT bookmarkable_id FROM bookmarks
+          WHERE bookmarks.user_id = #{@guardian.user.id} AND bookmarks.bookmarkable_type = 'Post'
+        )
+      SQL
     end
   end
 
@@ -571,7 +599,7 @@ class Search
           SQL
 
         # a bit yucky but we got to add the term back in
-        elsif match.to_s.length >= SiteSetting.min_search_term_length
+        elsif match.to_s.length >= min_search_term_length
           posts.where <<~SQL
             posts.id IN (
               SELECT post_id FROM post_search_data pd1
@@ -583,9 +611,27 @@ class Search
   end
 
   advanced_filter(/^group:(.+)$/i) do |posts, match|
-    group_id = Group.where('name ilike ? OR (id = ? AND id > 0)', match, match.to_i).pluck_first(:id)
+    group_id = Group
+      .visible_groups(@guardian.user)
+      .members_visible_groups(@guardian.user)
+      .where('name ilike ? OR (id = ? AND id > 0)', match, match.to_i).pluck_first(:id)
+
     if group_id
       posts.where("posts.user_id IN (select gu.user_id from group_users gu where gu.group_id = ?)", group_id)
+    else
+      posts.where("1 = 0")
+    end
+  end
+
+  advanced_filter(/^group_messages:(.+)$/i) do |posts, match|
+    group_id = Group
+      .visible_groups(@guardian.user)
+      .members_visible_groups(@guardian.user)
+      .where(has_messages: true)
+      .where('name ilike ? OR (id = ? AND id > 0)', match, match.to_i).pluck_first(:id)
+
+    if group_id
+      posts.where('posts.topic_id IN (SELECT topic_id FROM topic_allowed_groups WHERE group_id = ?)', group_id)
     else
       posts.where("1 = 0")
     end
@@ -649,9 +695,9 @@ class Search
 
       UNION
 
-      SELECT post_uploads.post_id
+      SELECT upload_references.target_id
         FROM uploads
-        JOIN post_uploads ON post_uploads.upload_id = uploads.id
+        JOIN upload_references ON upload_references.target_type = 'Post' AND upload_references.upload_id = uploads.id
        WHERE lower(uploads.extension) IN (:file_extensions)
     )", file_extensions: file_extensions)
   end
@@ -679,7 +725,7 @@ class Search
         FROM topic_tags tt, tags
         WHERE tt.tag_id = tags.id
         GROUP BY tt.topic_id
-        HAVING to_tsvector(#{default_ts_config}, array_to_string(array_agg(lower(tags.name)), ' ')) @@ to_tsquery(#{default_ts_config}, ?)
+        HAVING to_tsvector(#{default_ts_config}, #{Search.wrap_unaccent("array_to_string(array_agg(lower(tags.name)), ' ')")}) @@ to_tsquery(#{default_ts_config}, #{Search.wrap_unaccent('?')})
       )", tags.join('&'))
     else
       tags = match.split(",")
@@ -730,11 +776,17 @@ class Search
       elsif word =~ /^in:personal$/i
         @search_pms = true
         nil
+      elsif word =~ /^in:messages$/i
+        @search_pms = true
+        nil
       elsif word =~ /^in:personal-direct$/i
         @search_pms = true
         nil
       elsif word =~ /^in:all-pms$/i
         @search_all_pms = true
+        nil
+      elsif word =~ /^group_messages:(.+)$/i
+        @search_pms = true
         nil
       elsif word =~ /^personal_messages:(.+)$/i
         if user = User.find_by_username($1)
@@ -1126,8 +1178,18 @@ class Search
 
   def self.to_tsquery(ts_config: nil, term:, joiner: nil)
     ts_config = ActiveRecord::Base.connection.quote(ts_config) if ts_config
-    tsquery = "TO_TSQUERY(#{ts_config || default_ts_config}, '#{self.escape_string(term)}')"
-    tsquery = "REPLACE(#{tsquery}::text, '&', '#{self.escape_string(joiner)}')::tsquery" if joiner
+
+    # unaccent can be used only when a joiner is present because the
+    # additional processing and the final conversion to tsquery does not
+    # work well with characters that are converted to quotes by unaccent.
+    if joiner
+      tsquery = "TO_TSQUERY(#{ts_config || default_ts_config}, '#{self.escape_string(term)}')"
+      tsquery = "REPLACE(#{tsquery}::text, '&', '#{self.escape_string(joiner)}')::tsquery"
+    else
+      escaped_term = Search.wrap_unaccent("'#{self.escape_string(term)}'")
+      tsquery = "TO_TSQUERY(#{ts_config || default_ts_config}, #{escaped_term})"
+    end
+
     tsquery
   end
 
@@ -1299,5 +1361,19 @@ class Search
     @opts[:search_type].present? &&
     !readonly_mode &&
     @opts[:type_filter] != "exclude_topics"
+  end
+
+  def min_search_term_length
+    return @opts[:min_search_term_length] if @opts[:min_search_term_length]
+
+    if SiteSetting.search_tokenize_chinese
+      return SiteSetting.defaults.get('min_search_term_length', 'zh_CN')
+    end
+
+    if SiteSetting.search_tokenize_japanese
+      return SiteSetting.defaults.get('min_search_term_length', 'ja')
+    end
+
+    SiteSetting.min_search_term_length
   end
 end

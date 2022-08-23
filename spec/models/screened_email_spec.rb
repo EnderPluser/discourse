@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe ScreenedEmail do
-
+RSpec.describe ScreenedEmail do
   let(:email) { 'block@spamfromhome.org' }
   let(:similar_email) { 'bl0ck@spamfromhome.org' }
 
@@ -25,8 +22,7 @@ describe ScreenedEmail do
   end
 
   describe '#block' do
-    context 'email is not being blocked' do
-
+    context 'when email is not being blocked' do
       it 'creates a new record with default action of :block' do
         record = ScreenedEmail.block(email)
         expect(record).not_to be_new_record
@@ -34,7 +30,7 @@ describe ScreenedEmail do
         expect(record.action_type).to eq(ScreenedEmail.actions[:block])
       end
 
-      it 'lets action_type be overriden' do
+      it 'lets action_type be overridden' do
         record = ScreenedEmail.block(email, action_type: ScreenedEmail.actions[:do_nothing])
         expect(record).not_to be_new_record
         expect(record.email).to eq(email)
@@ -42,7 +38,7 @@ describe ScreenedEmail do
       end
     end
 
-    context 'email is already being blocked' do
+    context 'when email is already being blocked' do
       let!(:existing) { Fabricate(:screened_email, email: email) }
 
       it "doesn't create a new record" do
@@ -96,17 +92,16 @@ describe ScreenedEmail do
       end
     end
 
-    context "action_type is :block" do
+    context "when action_type is :block" do
       let!(:screened_email) { Fabricate(:screened_email, email: email, action_type: ScreenedEmail.actions[:block]) }
       it { is_expected.to eq(true) }
       include_examples "when a ScreenedEmail record matches"
     end
 
-    context "action_type is :do_nothing" do
+    context "when action_type is :do_nothing" do
       let!(:screened_email) { Fabricate(:screened_email, email: email, action_type: ScreenedEmail.actions[:do_nothing]) }
       it { is_expected.to eq(false) }
       include_examples "when a ScreenedEmail record matches"
     end
   end
-
 end

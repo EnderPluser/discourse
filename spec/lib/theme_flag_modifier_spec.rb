@@ -1,7 +1,5 @@
 # frozen_string_literal: true
-require 'rails_helper'
-
-describe ThemeModifierHelper do
+RSpec.describe ThemeModifierHelper do
   fab!(:theme) { Fabricate(:theme).tap { |t| t.theme_modifier_set.update!(serialize_topic_excerpts: true) } }
 
   it "defines a getter for modifiers" do

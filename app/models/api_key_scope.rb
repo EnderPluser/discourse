@@ -22,6 +22,7 @@ class ApiKeyScope < ActiveRecord::Base
         },
         topics: {
           write: { actions: %w[posts#create], params: %i[topic_id] },
+          update: { actions: %w[topics#update], params: %i[topic_id] },
           read: {
             actions: %w[topics#show topics#feed topics#posts],
             params: %i[topic_id], aliases: { topic_id: :id }
@@ -29,14 +30,27 @@ class ApiKeyScope < ActiveRecord::Base
           read_lists: {
             actions: list_actions, params: %i[category_id],
             aliases: { category_id: :category_slug_path_with_id }
-          },
-          wordpress: { actions: %w[topics#wordpress], params: %i[topic_id] }
+          }
         },
         posts: {
           edit: { actions: %w[posts#update], params: %i[id] }
         },
+        categories: {
+          list: { actions: %w[categories#index] },
+          show: { actions: %w[categories#show], params: %i[id] }
+        },
         uploads: {
-          create: { actions: %w[uploads#create] }
+          create: {
+            actions: %w[
+              uploads#create
+              uploads#generate_presigned_put
+              uploads#complete_external_upload
+              uploads#create_multipart
+              uploads#batch_presign_multipart_parts
+              uploads#abort_multipart
+              uploads#complete_multipart
+            ]
+          }
         },
         users: {
           bookmarks: { actions: %w[users#bookmarks], params: %i[username] },
@@ -50,7 +64,7 @@ class ApiKeyScope < ActiveRecord::Base
           list: { actions: %w[admin/users#index] },
         },
         email: {
-          receive_emails: { actions: %w[admin/email#handle_mail] }
+          receive_emails: { actions: %w[admin/email#handle_mail admin/email#smtp_should_reject] }
         },
         badges: {
           create: { actions: %w[admin/badges#create] },
@@ -60,6 +74,12 @@ class ApiKeyScope < ActiveRecord::Base
           list_user_badges: { actions: %w[user_badges#username], params: %i[username] },
           assign_badge_to_user: { actions: %w[user_badges#create], params: %i[username] },
           revoke_badge_from_user: { actions: %w[user_badges#destroy] },
+        },
+        wordpress: {
+          publishing: { actions: %w[site#site posts#create topics#update topics#status topics#show] },
+          commenting: { actions: %w[topics#wordpress] },
+          discourse_connect: { actions: %w[admin/users#sync_sso admin/users#log_out admin/users#index users#show] },
+          utilities: { actions: %w[users#create groups#index] }
         }
       }
 
@@ -88,18 +108,33 @@ class ApiKeyScope < ActiveRecord::Base
     end
 
     def find_urls(actions:, methods:)
-      urls = []
+      urls = Set.new
 
       if actions.present?
-        Rails.application.routes.routes.each do |route|
-          defaults = route.defaults
-          action = "#{defaults[:controller].to_s}##{defaults[:action]}"
-          path = route.path.spec.to_s.gsub(/\(\.:format\)/, '')
-          api_supported_path = path.end_with?('.rss') || route.path.requirements[:format]&.match?('json')
-          excluded_paths = %w[/new-topic /new-message /exception]
+        route_sets = [Rails.application.routes]
+        Rails::Engine.descendants.each do |engine|
+          next if engine == Rails::Application # abstract engine, can't call routes on it
+          next if engine == Discourse::Application # equiv. to Rails.application
+          route_sets << engine.routes
+        end
 
-          if actions.include?(action) && api_supported_path && !excluded_paths.include?(path)
-            urls << "#{path} (#{route.verb})"
+        route_sets.each do |set|
+          engine_mount_path = set.find_script_name({}).presence
+          engine_mount_path = nil if engine_mount_path == "/"
+          set.routes.each do |route|
+            defaults = route.defaults
+            action = "#{defaults[:controller].to_s}##{defaults[:action]}"
+            path = route.path.spec.to_s.gsub(/\(\.:format\)/, '')
+            api_supported_path = (
+              path.end_with?('.rss') ||
+              !route.path.requirements[:format] ||
+              route.path.requirements[:format].match?('json')
+            )
+            excluded_paths = %w[/new-topic /new-message /exception]
+
+            if actions.include?(action) && api_supported_path && !excluded_paths.include?(path)
+              urls << "#{engine_mount_path}#{path} (#{route.verb})"
+            end
           end
         end
       end
@@ -110,7 +145,7 @@ class ApiKeyScope < ActiveRecord::Base
         end
       end
 
-      urls
+      urls.to_a
     end
   end
 

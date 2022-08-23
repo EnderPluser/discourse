@@ -1,7 +1,5 @@
 # frozen_string_literal: true
-require 'rails_helper'
-
-describe "CommonMark" do
+RSpec.describe "CommonMark" do
   it 'passes spec' do
 
     SiteSetting.traditional_markdown_linebreaks = true
@@ -34,6 +32,8 @@ describe "CommonMark" do
         cooked.gsub!(" class=\"lang-auto\"", '')
         cooked.gsub!(/<span class="hashtag">(.*)<\/span>/, "\\1")
         cooked.gsub!(/<a name="(.*)" class="anchor" href="#\1*"><\/a>/, "")
+        # we support data-attributes which is not in the spec
+        cooked.gsub!("<pre data-code-startline=\"3\">", '<pre>')
         # we don't care about this
         cooked.gsub!("<blockquote>\n</blockquote>", "<blockquote></blockquote>")
         html.gsub!("<blockquote>\n</blockquote>", "<blockquote></blockquote>")

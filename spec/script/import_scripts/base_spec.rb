@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
 require_relative '../../../script/import_scripts/base'
 
-describe ImportScripts::Base do
+RSpec.describe ImportScripts::Base do
   before do
     STDOUT.stubs(:write)
   end
@@ -50,7 +49,7 @@ describe ImportScripts::Base do
 
   it "creates bookmarks, posts, and users" do
     MockSpecImporter.new(import_data).perform
-    expect(Bookmark.count).to eq(5)
+    expect(Bookmark.where(bookmarkable_type: "Post").count).to eq(5)
     expect(Post.count).to eq(5)
     expect(User.where('id > 0').count).to eq(1)
     expect(SiteSetting.purge_unactivated_users_grace_period_days).to eq(60)

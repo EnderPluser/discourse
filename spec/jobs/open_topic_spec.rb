@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Jobs::OpenTopic do
+RSpec.describe Jobs::OpenTopic do
   fab!(:admin) { Fabricate(:admin) }
 
   fab!(:topic) do

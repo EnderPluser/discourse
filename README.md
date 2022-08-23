@@ -32,15 +32,13 @@ To get your environment setup, follow the community setup guide for your operati
 
 If you're familiar with how Rails works and are comfortable setting up your own environment, you can also try out the [**Discourse Advanced Developer Guide**](docs/DEVELOPER-ADVANCED.md), which is aimed primarily at Ubuntu and macOS environments.
 
-Before you get started, ensure you have the following minimum versions: [Ruby 2.7+](https://www.ruby-lang.org/en/downloads/), [PostgreSQL 13+](https://www.postgresql.org/download/), [Redis 6.0+](https://redis.io/download). If you're having trouble, please see our [**TROUBLESHOOTING GUIDE**](docs/TROUBLESHOOTING.md) first!
+Before you get started, ensure you have the following minimum versions: [Ruby 2.7+](https://www.ruby-lang.org/en/downloads/), [PostgreSQL 13+](https://www.postgresql.org/download/), [Redis 6.2+](https://redis.io/download). If you're having trouble, please see our [**TROUBLESHOOTING GUIDE**](docs/TROUBLESHOOTING.md) first!
 
 ## Setting up Discourse
 
 If you want to set up a Discourse forum for production use, see our [**Discourse Install Guide**](docs/INSTALL.md).
 
 If you're looking for business class hosting, see [discourse.org/buy](https://www.discourse.org/buy/).
-
-If you're looking for our remote work solution, see [teams.discourse.com](https://teams.discourse.com/).
 
 ## Requirements
 
@@ -55,6 +53,8 @@ Discourse supports the **latest, stable releases** of all major browsers and pla
 | Microsoft Edge        |              |              |
 | Mozilla Firefox       |              |              |
 
+Additionally, we aim to support Safari on iOS 12.5+ until January 2023 (Discourse 3.0).
+
 ## Built With
 
 - [Ruby on Rails](https://github.com/rails/rails) &mdash; Our back end API is a Rails app. It responds to requests RESTfully in JSON.
@@ -67,7 +67,7 @@ Plus *lots* of Ruby Gems, a complete list of which is at [/main/Gemfile](https:/
 
 ## Contributing
 
-[![Build Status](https://github.com/discourse/discourse/workflows/CI/badge.svg)](https://github.com/discourse/discourse/actions)
+[![Build Status](https://github.com/discourse/discourse/actions/workflows/tests.yml/badge.svg)](https://github.com/discourse/discourse/actions)
 
 Discourse is **100% free** and **open source**. We encourage and support an active, healthy community that
 accepts contributions from the public &ndash; including you!
@@ -93,7 +93,7 @@ The original Discourse code contributors can be found in [**AUTHORS.MD**](docs/A
 
 ## Copyright / License
 
-Copyright 2014 - 2021 Civilized Discourse Construction Kit, Inc.
+Copyright 2014 - 2022 Civilized Discourse Construction Kit, Inc.
 
 Licensed under the GNU General Public License Version 2.0 (or later);
 you may not use this work except in compliance with the License.
@@ -108,6 +108,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 Discourse logo and “Discourse Forum” ®, Civilized Discourse Construction Kit, Inc.
+
+## Accessibility
+
+To guide our ongoing effort to build accessible software we follow the [W3C’s Web Content Accessibility Guidelines (WCAG)](https://www.w3.org/TR/WCAG21/). If you'd like to report an accessibility issue that makes it difficult for you to use Discourse, email accessibility@discourse.org. For more information visit [discourse.org/accessibility](https://discourse.org/accessibility). 
 
 ## Dedication
 

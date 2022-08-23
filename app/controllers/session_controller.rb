@@ -6,6 +6,12 @@ class SessionController < ApplicationController
   skip_before_action :redirect_to_login_if_required
   skip_before_action :preload_json, :check_xhr, only: %i(sso sso_login sso_provider destroy one_time_password)
 
+  skip_before_action :check_xhr, only: %i(second_factor_auth_show)
+
+  requires_login only: [:second_factor_auth_show, :second_factor_auth_perform]
+
+  allow_in_staff_writes_only_mode :create
+
   ACTIVATE_USER_KEY = "activate_user"
 
   def csrf
@@ -13,6 +19,8 @@ class SessionController < ApplicationController
   end
 
   def sso
+    raise Discourse::NotFound unless SiteSetting.enable_discourse_connect?
+
     destination_url = cookies[:destination_url] || session[:destination_url]
     return_path = params[:return_path] || path('/')
 
@@ -24,88 +32,58 @@ class SessionController < ApplicationController
     session.delete(:destination_url)
     cookies.delete(:destination_url)
 
-    if SiteSetting.enable_discourse_connect?
-      sso = DiscourseSingleSignOn.generate_sso(return_path, secure_session: secure_session)
-      if SiteSetting.verbose_discourse_connect_logging
-        Rails.logger.warn("Verbose SSO log: Started SSO process\n\n#{sso.diagnostics}")
-      end
-      redirect_to sso_url(sso)
-    else
-      render body: nil, status: 404
-    end
+    sso = DiscourseConnect.generate_sso(return_path, secure_session: secure_session)
+    connect_verbose_warn { "Verbose SSO log: Started SSO process\n\n#{sso.diagnostics}" }
+    redirect_to sso_url(sso), allow_other_host: true
   end
 
-  def sso_provider(payload = nil)
-    if SiteSetting.enable_discourse_connect_provider
-      begin
-        if !payload
-          params.require(:sso)
-          payload = request.query_string
-        end
-        sso = SingleSignOnProvider.parse(payload)
-      rescue SingleSignOnProvider::BlankSecret
-        render plain: I18n.t("discourse_connect.missing_secret"), status: 400
-        return
-      rescue SingleSignOnProvider::ParseError => e
-        if SiteSetting.verbose_discourse_connect_logging
-          Rails.logger.warn("Verbose SSO log: Signature parse error\n\n#{e.message}\n\n#{sso&.diagnostics}")
-        end
+  def sso_provider(payload = nil, confirmed_2fa_during_login = false)
+    raise Discourse::NotFound unless SiteSetting.enable_discourse_connect_provider
 
-        # Do NOT pass the error text to the client, it would give them the correct signature
-        render plain: I18n.t("discourse_connect.login_error"), status: 422
-        return
-      end
+    result = run_second_factor!(
+      SecondFactor::Actions::DiscourseConnectProvider,
+      payload: payload,
+      confirmed_2fa_during_login: confirmed_2fa_during_login
+    )
 
-      if sso.return_sso_url.blank?
-        render plain: "return_sso_url is blank, it must be provided", status: 400
-        return
-      end
-
-      if sso.logout
-        params[:return_url] = sso.return_sso_url
+    if result.second_factor_auth_skipped?
+      data = result.data
+      if data[:logout]
+        params[:return_url] = data[:return_sso_url]
         destroy
         return
       end
 
-      if current_user
-        sso.name = current_user.name
-        sso.username = current_user.username
-        sso.email = current_user.email
-        sso.external_id = current_user.id.to_s
-        sso.admin = current_user.admin?
-        sso.moderator = current_user.moderator?
-        sso.groups = current_user.groups.pluck(:name).join(",")
-
-        if current_user.uploaded_avatar.present?
-          base_url = Discourse.store.external? ? "#{Discourse.store.absolute_base_url}/" : Discourse.base_url
-          avatar_url = "#{base_url}#{Discourse.store.get_path_for_upload(current_user.uploaded_avatar)}"
-          sso.avatar_url = UrlHelper.absolute Discourse.store.cdn_url(avatar_url)
-        end
-
-        if current_user.user_profile.profile_background_upload.present?
-          sso.profile_background_url = UrlHelper.absolute(upload_cdn_path(
-            current_user.user_profile.profile_background_upload.url
-          ))
-        end
-
-        if current_user.user_profile.card_background_upload.present?
-          sso.card_background_url = UrlHelper.absolute(upload_cdn_path(
-            current_user.user_profile.card_background_upload.url
-          ))
-        end
-
-        if request.xhr?
-          cookies[:sso_destination_url] = sso.to_url(sso.return_sso_url)
-        else
-          redirect_to sso.to_url(sso.return_sso_url)
-        end
-      else
-        cookies[:sso_payload] = request.query_string
+      if data[:no_current_user]
+        cookies[:sso_payload] = payload || request.query_string
         redirect_to path('/login')
+        return
       end
-    else
-      render body: nil, status: 404
+
+      if request.xhr?
+        # for the login modal
+        cookies[:sso_destination_url] = data[:sso_redirect_url]
+      else
+        redirect_to data[:sso_redirect_url], allow_other_host: true
+      end
+    elsif result.no_second_factors_enabled?
+      if request.xhr?
+        # for the login modal
+        cookies[:sso_destination_url] = result.data[:sso_redirect_url]
+      else
+        redirect_to result.data[:sso_redirect_url], allow_other_host: true
+      end
+    elsif result.second_factor_auth_completed?
+      redirect_url = result.data[:sso_redirect_url]
+      render json: success_json.merge(redirect_url: redirect_url)
     end
+  rescue DiscourseConnectProvider::BlankSecret
+    render plain: I18n.t("discourse_connect.missing_secret"), status: 400
+  rescue DiscourseConnectProvider::ParseError
+    # Do NOT pass the error text to the client, it would give them the correct signature
+    render plain: I18n.t("discourse_connect.login_error"), status: 422
+  rescue DiscourseConnectProvider::BlankReturnUrl
+    render plain: "return_sso_url is blank, it must be provided", status: 400
   end
 
   # For use in development mode only when login options could be limited or disabled.
@@ -116,6 +94,7 @@ class SessionController < ApplicationController
     def become
 
       raise Discourse::InvalidAccess if Rails.env.production?
+      raise Discourse::ReadOnly if @readonly_mode
 
       if ENV['DISCOURSE_DEV_ALLOW_ANON_TO_IMPERSONATE'] != "1"
         render(content_type: 'text/plain', inline: <<~TEXT)
@@ -138,33 +117,28 @@ class SessionController < ApplicationController
   end
 
   def sso_login
-    raise Discourse::NotFound.new unless SiteSetting.enable_discourse_connect
+    raise Discourse::NotFound unless SiteSetting.enable_discourse_connect
+    raise Discourse::ReadOnly if @readonly_mode && !staff_writes_only_mode?
 
     params.require(:sso)
     params.require(:sig)
 
     begin
-      sso = DiscourseSingleSignOn.parse(request.query_string, secure_session: secure_session)
-    rescue DiscourseSingleSignOn::ParseError => e
-      if SiteSetting.verbose_discourse_connect_logging
-        Rails.logger.warn("Verbose SSO log: Signature parse error\n\n#{e.message}\n\n#{sso&.diagnostics}")
-      end
+      sso = DiscourseConnect.parse(request.query_string, secure_session: secure_session)
+    rescue DiscourseConnect::ParseError => e
+      connect_verbose_warn { "Verbose SSO log: Signature parse error\n\n#{e.message}\n\n#{sso&.diagnostics}" }
 
       # Do NOT pass the error text to the client, it would give them the correct signature
       return render_sso_error(text: I18n.t("discourse_connect.login_error"), status: 422)
     end
 
     if !sso.nonce_valid?
-      if SiteSetting.verbose_discourse_connect_logging
-        Rails.logger.warn("Verbose SSO log: #{sso.nonce_error}\n\n#{sso.diagnostics}")
-      end
+      connect_verbose_warn { "Verbose SSO log: #{sso.nonce_error}\n\n#{sso.diagnostics}" }
       return render_sso_error(text: I18n.t("discourse_connect.timeout_expired"), status: 419)
     end
 
     if ScreenedIpAddress.should_block?(request.remote_ip)
-      if SiteSetting.verbose_discourse_connect_logging
-        Rails.logger.warn("Verbose SSO log: IP address is blocked #{request.remote_ip}\n\n#{sso.diagnostics}")
-      end
+      connect_verbose_warn { "Verbose SSO log: IP address is blocked #{request.remote_ip}\n\n#{sso.diagnostics}" }
       return render_sso_error(text: I18n.t("discourse_connect.unknown_error"), status: 500)
     end
 
@@ -175,17 +149,20 @@ class SessionController < ApplicationController
       invite = validate_invitiation!(sso)
 
       if user = sso.lookup_or_create_user(request.remote_ip)
+        raise Discourse::ReadOnly if staff_writes_only_mode? && !user&.staff?
 
         if user.suspended?
           render_sso_error(text: failed_to_login(user)[:error], status: 403)
           return
         end
 
-        # users logging in via SSO using an invite do not need to be approved,
-        # they are already pre-approved because they have been invited
-        if SiteSetting.must_approve_users? && !user.approved? && invite.blank?
+        if SiteSetting.must_approve_users? && !user.approved?
+          if invite.present? && user.invited_user.blank?
+            redeem_invitation(invite, sso)
+          end
+
           if SiteSetting.discourse_connect_not_approved_url.present?
-            redirect_to SiteSetting.discourse_connect_not_approved_url
+            redirect_to SiteSetting.discourse_connect_not_approved_url, allow_other_host: true
           else
             render_sso_error(text: I18n.t("discourse_connect.account_not_approved"), status: 403)
           end
@@ -236,24 +213,22 @@ class SessionController < ApplicationController
           return_path = path("/")
         end
 
-        redirect_to return_path
+        redirect_to return_path, allow_other_host: true
       else
         render_sso_error(text: I18n.t("discourse_connect.not_found"), status: 500)
       end
     rescue ActiveRecord::RecordInvalid => e
 
-      if SiteSetting.verbose_discourse_connect_logging
-        Rails.logger.warn(<<~EOF)
+      connect_verbose_warn { <<~TEXT }
         Verbose SSO log: Record was invalid: #{e.record.class.name} #{e.record.id}
         #{e.record.errors.to_h}
 
         Attributes:
-        #{e.record.attributes.slice(*SingleSignOn::ACCESSORS.map(&:to_s))}
+        #{e.record.attributes.slice(*DiscourseConnectBase::ACCESSORS.map(&:to_s))}
 
         SSO Diagnostics:
         #{sso.diagnostics}
-        EOF
-      end
+      TEXT
 
       text = nil
 
@@ -267,7 +242,7 @@ class SessionController < ApplicationController
       end
 
       render_sso_error(text: text || I18n.t("discourse_connect.unknown_error"), status: 500)
-    rescue DiscourseSingleSignOn::BlankExternalId
+    rescue DiscourseConnect::BlankExternalId
       render_sso_error(text: I18n.t("discourse_connect.blank_id_error"), status: 500)
     rescue Invite::ValidationFailed => e
       render_sso_error(text: e.message, status: 400)
@@ -289,9 +264,7 @@ class SessionController < ApplicationController
   end
 
   def login_sso_user(sso, user)
-    if SiteSetting.verbose_discourse_connect_logging
-      Rails.logger.warn("Verbose SSO log: User was logged on #{user.username}\n\n#{sso.diagnostics}")
-    end
+    connect_verbose_warn { "Verbose SSO log: User was logged on #{user.username}\n\n#{sso.diagnostics}" }
     log_on_user(user) if user.id != current_user&.id
   end
 
@@ -302,6 +275,9 @@ class SessionController < ApplicationController
     return invalid_credentials if params[:password].length > User.max_password_length
 
     user = User.find_by_username_or_email(normalized_login_param)
+
+    raise Discourse::ReadOnly if staff_writes_only_mode? && !user&.staff?
+
     rate_limit_second_factor!(user)
 
     if user.present?
@@ -330,11 +306,16 @@ class SessionController < ApplicationController
       return render json: payload
     end
 
-    if !authenticate_second_factor(user)
+    second_factor_auth_result = authenticate_second_factor(user)
+    if !second_factor_auth_result.ok
       return render(json: @second_factor_failure_payload)
     end
 
-    (user.active && user.email_confirmed?) ? login(user) : not_activated(user)
+    if user.active && user.email_confirmed?
+      login(user, second_factor_auth_result)
+    else
+      not_activated(user)
+    end
   end
 
   def email_login_info
@@ -384,7 +365,7 @@ class SessionController < ApplicationController
 
     rate_limit_second_factor!(user)
 
-    if user.present? && !authenticate_second_factor(user)
+    if user.present? && !authenticate_second_factor(user).ok
       return render(json: @second_factor_failure_payload)
     end
 
@@ -424,6 +405,116 @@ class SessionController < ApplicationController
     render layout: 'no_ember', locals: { hide_auth_buttons: true }
   end
 
+  def second_factor_auth_show
+    user = current_user
+
+    nonce = params.require(:nonce)
+    challenge = nil
+    error_key = nil
+    status_code = 200
+    begin
+      challenge = SecondFactor::AuthManager.find_second_factor_challenge(nonce, secure_session)
+    rescue SecondFactor::BadChallenge => exception
+      error_key = exception.error_translation_key
+      status_code = exception.status_code
+    end
+
+    json = {}
+    if challenge
+      json.merge!(
+        totp_enabled: user.totp_enabled?,
+        backup_enabled: user.backup_codes_enabled?,
+        allowed_methods: challenge[:allowed_methods]
+      )
+      if user.security_keys_enabled?
+        Webauthn.stage_challenge(user, secure_session)
+        json.merge!(Webauthn.allowed_credentials(user, secure_session))
+        json[:security_keys_enabled] = true
+      else
+        json[:security_keys_enabled] = false
+      end
+      if challenge[:description]
+        json[:description] = challenge[:description]
+      end
+    else
+      json[:error] = I18n.t(error_key)
+    end
+
+    respond_to do |format|
+      format.html do
+        store_preloaded("2fa_challenge_data", MultiJson.dump(json))
+        raise ApplicationController::RenderEmpty.new
+      end
+
+      format.json do
+        render json: json, status: status_code
+      end
+    end
+  end
+
+  def second_factor_auth_perform
+    nonce = params.require(:nonce)
+    challenge = nil
+    error_key = nil
+    status_code = 200
+    begin
+      challenge = SecondFactor::AuthManager.find_second_factor_challenge(nonce, secure_session)
+    rescue SecondFactor::BadChallenge => exception
+      error_key = exception.error_translation_key
+      status_code = exception.status_code
+    end
+
+    if error_key
+      json = failed_json.merge(
+        ok: false,
+        error: I18n.t(error_key),
+        reason: "challenge_not_found_or_expired"
+      )
+      render json: failed_json.merge(json), status: status_code
+      return
+    end
+
+    # no proper error messages for these cases because the only way they can
+    # happen is if someone is messing with us.
+    # the first one can only happen if someone disables a 2FA method after
+    # they're redirected to the 2fa page and then uses the same method they've
+    # disabled.
+    second_factor_method = params[:second_factor_method].to_i
+    if !current_user.valid_second_factor_method_for_user?(second_factor_method)
+      raise Discourse::InvalidAccess.new
+    end
+    # and this happens if someone tries to use a 2FA method that's not accepted
+    # for the action they're trying to perform. e.g. using backup codes to
+    # grant someone admin status.
+    if !challenge[:allowed_methods].include?(second_factor_method)
+      raise Discourse::InvalidAccess.new
+    end
+
+    if !challenge[:successful]
+      rate_limit_second_factor!(current_user)
+      second_factor_auth_result = current_user.authenticate_second_factor(params, secure_session)
+      if second_factor_auth_result.ok
+        challenge[:successful] = true
+        challenge[:generated_at] += 1.minute.to_i
+        secure_session["current_second_factor_auth_challenge"] = challenge.to_json
+      else
+        error_json = second_factor_auth_result
+          .to_h
+          .deep_symbolize_keys
+          .slice(:ok, :error, :reason)
+          .merge(failed_json)
+        render json: error_json, status: 400
+        return
+      end
+    end
+    render json: {
+      ok: true,
+      callback_method: challenge[:callback_method],
+      callback_path: challenge[:callback_path],
+      redirect_url: challenge[:redirect_url]
+    }, status: 200
+  end
+
   def forgot_password
     params.require(:login)
 
@@ -434,27 +525,24 @@ class SessionController < ApplicationController
     RateLimiter.new(nil, "forgot-password-hr-#{request.remote_ip}", 6, 1.hour).performed!
     RateLimiter.new(nil, "forgot-password-min-#{request.remote_ip}", 3, 1.minute).performed!
 
-    user = User.find_by_username_or_email(normalized_login_param)
+    user = if SiteSetting.hide_email_address_taken && !current_user&.staff?
+      raise Discourse::InvalidParameters.new(:login) if !EmailAddressValidator.valid_value?(normalized_login_param)
+      User.real.where(staged: false).find_by_email(Email.downcase(normalized_login_param))
+    else
+      User.real.where(staged: false).find_by_username_or_email(normalized_login_param)
+    end
 
     if user
       RateLimiter.new(nil, "forgot-password-login-day-#{user.username}", 6, 1.day).performed!
+      email_token = user.email_tokens.create!(email: user.email, scope: EmailToken.scopes[:password_reset])
+      Jobs.enqueue(:critical_user_email, type: "forgot_password", user_id: user.id, email_token: email_token.token)
     else
       RateLimiter.new(nil, "forgot-password-login-hour-#{normalized_login_param}", 5, 1.hour).performed!
     end
 
-    user_presence = user.present? && user.human? && !user.staged
-    if user_presence
-      email_token = user.email_tokens.create!(email: user.email, scope: EmailToken.scopes[:password_reset])
-      Jobs.enqueue(:critical_user_email, type: :forgot_password, user_id: user.id, email_token: email_token.token)
-    end
-
     json = success_json
-    unless SiteSetting.hide_email_address_taken
-      json[:user_found] = user_presence
-    end
-
+    json[:user_found] = user.present? if !SiteSetting.hide_email_address_taken
     render json: json
-
   rescue RateLimiter::LimitExceeded
     render_json_error(I18n.t("rate_limiter.slow_down"))
   end
@@ -480,7 +568,7 @@ class SessionController < ApplicationController
 
     redirect_url ||= path("/")
 
-    event_data = { redirect_url: redirect_url, user: current_user }
+    event_data = { redirect_url: redirect_url, user: current_user, client_ip: request&.ip, user_agent: request&.user_agent }
     DiscourseEvent.trigger(:before_session_destroy, event_data)
     redirect_url = event_data[:redirect_url]
 
@@ -491,7 +579,7 @@ class SessionController < ApplicationController
         redirect_url: redirect_url
       }
     else
-      redirect_to redirect_url
+      redirect_to redirect_url, allow_other_host: true
     end
   end
 
@@ -504,6 +592,16 @@ class SessionController < ApplicationController
       challenge: challenge_value,
       expires_in: SecureSession.expiry
     }
+  end
+
+  def scopes
+    if is_api?
+      key = request.env[Auth::DefaultCurrentUserProvider::HEADER_API_KEY]
+      api_key = ApiKey.active.with_key(key).first
+      render_serialized(api_key.api_key_scopes, ApiKeyScopeSerializer, root: 'scopes')
+    else
+      render body: nil, status: 404
+    end
   end
 
   protected
@@ -531,6 +629,12 @@ class SessionController < ApplicationController
 
   private
 
+  def connect_verbose_warn(&blk)
+    if SiteSetting.verbose_discourse_connect_logging
+      Rails.logger.warn(blk.call)
+    end
+  end
+
   def authenticate_second_factor(user)
     second_factor_authentication_result = user.authenticate_second_factor(params, secure_session)
     if !second_factor_authentication_result.ok
@@ -540,10 +644,10 @@ class SessionController < ApplicationController
         failure_payload.merge!(Webauthn.allowed_credentials(user, secure_session))
       end
       @second_factor_failure_payload = failed_json.merge(failure_payload)
-      return false
+      return second_factor_authentication_result
     end
 
-    true
+    second_factor_authentication_result
   end
 
   def login_error_check(user)
@@ -595,13 +699,18 @@ class SessionController < ApplicationController
     }
   end
 
-  def login(user)
+  def login(user, second_factor_auth_result)
     session.delete(ACTIVATE_USER_KEY)
     user.update_timezone_if_missing(params[:timezone])
     log_on_user(user)
 
     if payload = cookies.delete(:sso_payload)
-      sso_provider(payload)
+      confirmed_2fa_during_login = (
+        second_factor_auth_result&.ok &&
+        second_factor_auth_result.used_2fa_method.present? &&
+        second_factor_auth_result.used_2fa_method != UserSecondFactor.methods[:backup_codes]
+      )
+      sso_provider(payload, confirmed_2fa_during_login)
     else
       render_serialized(user, UserSerializer)
     end

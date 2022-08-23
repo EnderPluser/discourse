@@ -1,11 +1,9 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe StaticController do
+RSpec.describe StaticController do
   fab!(:upload) { Fabricate(:upload) }
 
-  context '#favicon' do
+  describe '#favicon' do
     let(:filename) { 'smallest.png' }
     let(:file) { file_from_fixtures(filename) }
 
@@ -13,15 +11,13 @@ describe StaticController do
       UploadCreator.new(file, filename).create_for(Discourse.system_user.id)
     end
 
-    before_all do
-      DistributedMemoizer.flush!
-    end
-
     after do
-      DistributedMemoizer.flush!
+      Discourse.redis.scan_each(match: "memoize_*").each do |key|
+        Discourse.redis.del(key)
+      end
     end
 
-    describe 'local store' do
+    context 'with local store' do
       it 'returns the default favicon if favicon has not been configured' do
         get '/favicon/proxied'
 
@@ -41,7 +37,7 @@ describe StaticController do
       end
     end
 
-    describe 'external store' do
+    context 'with external store' do
       let(:upload) do
         Upload.create!(
           url: '//s3-upload-bucket.s3-us-east-1.amazonaws.com/somewhere/a.png',
@@ -70,7 +66,7 @@ describe StaticController do
     end
   end
 
-  context '#brotli_asset' do
+  describe '#brotli_asset' do
     it 'returns a non brotli encoded 404 if asset is missing' do
       get "/brotli_asset/missing.js"
 
@@ -137,7 +133,7 @@ describe StaticController do
     end
   end
 
-  context '#cdn_asset' do
+  describe '#cdn_asset' do
     let (:site) { RailsMultisite::ConnectionManagement.current_db }
 
     it 'can serve assets' do
@@ -159,7 +155,7 @@ describe StaticController do
     end
   end
 
-  context '#show' do
+  describe '#show' do
     before do
       post = create_post
       SiteSetting.tos_topic_id = post.topic.id
@@ -212,7 +208,7 @@ describe StaticController do
         expect(response.status).to eq(404)
       end
 
-      context "modal pages" do
+      context "with modal pages" do
         it "should return the right response for /signup" do
           get "/signup"
           expect(response.status).to eq(200)
@@ -270,12 +266,68 @@ describe StaticController do
       end
     end
 
-    context "crawler view" do
+    context "with crawler view" do
       it "should include correct title" do
         get '/faq', headers: { 'HTTP_USER_AGENT' => 'Googlebot' }
         expect(response.status).to eq(200)
         expect(response.body).to include("<title>FAQ - Discourse</title>")
       end
+    end
+
+    context "with plugin api extensions" do
+      after do
+        Rails.application.reload_routes!
+        StaticController::CUSTOM_PAGES.clear
+      end
+
+      it "adds new topic-backed pages" do
+        routes = Proc.new do
+          get "contact" => "static#show", id: "contact"
+        end
+        Discourse::Application.routes.send(:eval_block, routes)
+
+        topic_id = Fabricate(:post, cooked: "contact info").topic_id
+        SiteSetting.setting(:test_contact_topic_id, topic_id)
+
+        Plugin::Instance.new.add_topic_static_page("contact", topic_id: "test_contact_topic_id")
+
+        get "/contact"
+
+        expect(response.status).to eq(200)
+        expect(response.body).to include("contact info")
+      end
+
+      it "replaces existing topic-backed pages" do
+        topic_id = Fabricate(:post, cooked: "Regular FAQ").topic_id
+        SiteSetting.setting(:test_faq_topic_id, topic_id)
+        polish_topic_id = Fabricate(:post, cooked: "Polish FAQ").topic_id
+        SiteSetting.setting(:test_polish_faq_topic_id, polish_topic_id)
+
+        Plugin::Instance.new.add_topic_static_page("faq") do
+          current_user&.locale == "pl" ? "test_polish_faq_topic_id" : "test_faq_topic_id"
+        end
+
+        get "/faq"
+
+        expect(response.status).to eq(200)
+        expect(response.body).to include("Regular FAQ")
+
+        sign_in(Fabricate(:user, locale: "pl"))
+        get "/faq"
+
+        expect(response.status).to eq(200)
+        expect(response.body).to include("Polish FAQ")
+      end
+    end
+
+    it "does not pollute SiteSetting.title (regression)" do
+      SiteSetting.title = "test"
+      SiteSetting.short_site_description = "something"
+
+      expect do
+        get "/login"
+        get "/login"
+      end.to_not change { SiteSetting.title }
     end
   end
 
@@ -345,6 +397,41 @@ describe StaticController do
       it 'redirects to the root url' do
         post "/login.json", params: { redirect: login_path }
         expect(response).to redirect_to('/')
+      end
+    end
+  end
+
+  describe "#service_worker_asset" do
+    it "works" do
+      get "/service-worker.js"
+      expect(response.status).to eq(200)
+      expect(response.content_type).to start_with("application/javascript")
+      expect(response.body).to include("workbox")
+    end
+
+    it "replaces sourcemap URL" do
+      Rails.application.assets_manifest.stubs(:find_sources).with("service-worker.js").returns([
+        <<~JS
+          someFakeServiceWorkerSource();
+          //# sourceMappingURL=service-worker-abcde.js.map
+        JS
+      ])
+
+      {
+        '/assets/service-worker.js' => '/assets/service-worker-abcde.js.map',
+        '/assets/service-worker.js.br' => '/assets/service-worker-abcde.js.map',
+        '/assets/service-worker.br.js' => '/assets/service-worker-abcde.js.map',
+        '/assets/service-worker.js.gz' => '/assets/service-worker-abcde.js.map',
+        '/assets/service-worker.gz.js' => '/assets/service-worker-abcde.js.map',
+        'https://example.com/assets/service-worker.js' => 'https://example.com/assets/service-worker-abcde.js.map',
+        'https://example.com/subfolder/assets/service-worker.js' => 'https://example.com/subfolder/assets/service-worker-abcde.js.map',
+      }.each do |asset_path, expected_map_url|
+        ActionController::Base.helpers.stubs(:asset_path).with("service-worker.js").returns(asset_path)
+
+        get "/service-worker.js"
+        expect(response.status).to eq(200)
+        expect(response.content_type).to start_with("application/javascript")
+        expect(response.body).to include("sourceMappingURL=#{expected_map_url}\n")
       end
     end
   end

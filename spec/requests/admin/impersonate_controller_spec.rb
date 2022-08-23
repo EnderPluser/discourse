@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Admin::ImpersonateController do
+RSpec.describe Admin::ImpersonateController do
 
   it "is a subclass of AdminController" do
     expect(Admin::ImpersonateController < Admin::AdminController).to eq(true)
@@ -43,7 +41,7 @@ describe Admin::ImpersonateController do
         expect(session[:current_user_id]).to eq(admin.id)
       end
 
-      context 'success' do
+      context 'with success' do
         it "succeeds and logs the impersonation" do
           expect do
             post "/admin/impersonate.json", params: { username_or_email: user.username }

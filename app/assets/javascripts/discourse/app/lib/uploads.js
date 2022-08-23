@@ -10,7 +10,7 @@ function isGUID(value) {
 }
 
 export function markdownNameFromFileName(fileName) {
-  let name = fileName.substr(0, fileName.lastIndexOf("."));
+  let name = fileName.slice(0, fileName.lastIndexOf("."));
 
   if (isAppleDevice() && isGUID(name)) {
     name = I18n.t("upload_selector.default_image_alt_text");
@@ -116,18 +116,26 @@ export function validateUploadedFile(file, opts) {
     }
   }
 
+  if (file.size === 0) {
+    /* eslint-disable no-console */
+    console.warn("File with a 0 byte size detected, cancelling upload.", file);
+    bootbox.alert(I18n.t("post.errors.file_size_zero"));
+    return false;
+  }
+
   // everything went fine
   return true;
 }
 
-export const IMAGES_EXTENSIONS_REGEX = /(png|jpe?g|gif|svg|ico|heic|heif|webp)/i;
+export const IMAGES_EXTENSIONS_REGEX =
+  /(png|jpe?g|gif|svg|ico|heic|heif|webp)/i;
 
 function extensionsToArray(exts) {
   return exts
     .toLowerCase()
     .replace(/[\s\.]+/g, "")
     .split("|")
-    .filter((ext) => ext.indexOf("*") === -1);
+    .filter((ext) => !ext.includes("*"));
 }
 
 function extensions(siteSettings) {
@@ -190,8 +198,8 @@ function authorizedImagesExtensions(staff, siteSettings) {
 
 export function authorizesAllExtensions(staff, siteSettings) {
   return (
-    siteSettings.authorized_extensions.indexOf("*") >= 0 ||
-    (siteSettings.authorized_extensions_for_staff.indexOf("*") >= 0 && staff)
+    siteSettings.authorized_extensions.includes("*") ||
+    (siteSettings.authorized_extensions_for_staff.includes("*") && staff)
   );
 }
 
@@ -222,7 +230,7 @@ export function isImage(path) {
 }
 
 export function isVideo(path) {
-  return /\.(mov|mp4|webm|m4v|3gp|ogv|avi|mpeg|ogv)$/i.test(path);
+  return /\.(mov|mp4|webm|m4v|3gp|ogv|avi|mpeg)$/i.test(path);
 }
 
 export function isAudio(path) {

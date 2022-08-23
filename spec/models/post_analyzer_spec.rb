@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe PostAnalyzer do
-
+RSpec.describe PostAnalyzer do
   let(:default_topic_id) { 12 }
   let(:url) { 'https://twitter.com/evil_trout/status/345954894420787200' }
 
@@ -60,9 +57,28 @@ describe PostAnalyzer do
       cooked = post_analyzer.cook('*this is italic*')
       expect(cooked).to eq('<p><em>this is italic</em></p>')
     end
+
+    it 'should respect SiteSetting.max_oneboxes_per_post' do
+      SiteSetting.max_oneboxes_per_post = 2
+      Oneboxer.expects(:cached_onebox).with(url).returns('something').twice
+
+      cooked = post_analyzer.cook(<<~RAW)
+        #{url}
+
+        #{url}
+
+        #{url}
+      RAW
+
+      expect(cooked).to match_html(<<~HTML)
+        <p>something</p>
+        <p>something</p>
+        <p><a href="#{url}" class="onebox" target="_blank" rel="noopener nofollow ugc">#{url}</a></p>
+      HTML
+    end
   end
 
-  context "links" do
+  describe "links" do
     let(:raw_no_links) { "hello world my name is evil trout" }
     let(:raw_one_link_md) { "[jlawr](http://www.imdb.com/name/nm2225369)" }
     let(:raw_two_links_html) { "<a href='http://disneyland.disney.go.com/'>disney</a> <a href='http://reddit.com'>reddit</a>" }

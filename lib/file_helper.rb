@@ -17,12 +17,24 @@ class FileHelper
     filename.match?(supported_images_regexp)
   end
 
+  def self.is_supported_video?(filename)
+    filename.match?(supported_video_regexp)
+  end
+
+  def self.is_supported_audio?(filename)
+    filename.match?(supported_audio_regexp)
+  end
+
   def self.is_inline_image?(filename)
     filename.match?(inline_images_regexp)
   end
 
   def self.is_supported_media?(filename)
     filename.match?(supported_media_regexp)
+  end
+
+  def self.is_supported_playable_media?(filename)
+    filename.match?(supported_playable_media_regexp)
   end
 
   class FakeIO
@@ -61,7 +73,7 @@ class FileHelper
             # attempt error API compatibility
             io = FakeIO.new
             io.status = [response.code, ""]
-            raise OpenURI::HTTPError.new("#{response.code} Error: #{response.body}", io)
+            raise OpenURI::HTTPError.new("#{response.code} Error", io)
           else
             log(:error, "FinalDestination did not work for: #{url}") if verbose
             throw :done
@@ -151,11 +163,19 @@ class FileHelper
   end
 
   def self.supported_audio
-    @@supported_audio ||= Set.new %w{mp3 ogg wav m4a}
+    @@supported_audio ||= Set.new %w{mp3 ogg oga opus wav m4a m4b m4p m4r aac flac}
   end
 
   def self.supported_video
-    @@supported_video ||= Set.new %w{mov mp4 webm ogv}
+    @@supported_video ||= Set.new %w{mov mp4 webm ogv m4v 3gp avi mpeg}
+  end
+
+  def self.supported_video_regexp
+    @@supported_video_regexp ||= /\.(#{supported_video.to_a.join("|")})$/i
+  end
+
+  def self.supported_audio_regexp
+    @@supported_audio_regexp ||= /\.(#{supported_audio.to_a.join("|")})$/i
   end
 
   def self.supported_images_regexp
@@ -170,6 +190,14 @@ class FileHelper
     @@supported_media_regexp ||=
       begin
         media = supported_images | supported_audio | supported_video
+        /\.(#{media.to_a.join("|")})$/i
+      end
+  end
+
+  def self.supported_playable_media_regexp
+    @@supported_playable_media_regexp ||=
+      begin
+        media = supported_audio | supported_video
         /\.(#{media.to_a.join("|")})$/i
       end
   end

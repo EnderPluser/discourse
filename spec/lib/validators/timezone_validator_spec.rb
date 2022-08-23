@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe TimezoneValidator do
+RSpec.describe TimezoneValidator do
   describe "#valid?" do
     context "when timezone is ok" do
       it "returns true" do

@@ -4,33 +4,34 @@
 
 class Barber::Precompiler
   def sources
-    [File.open("#{Rails.root}/vendor/assets/javascripts/handlebars.js"),
+    [File.open("#{Rails.root}/app/assets/javascripts/node_modules/handlebars/dist/handlebars.js"),
      precompiler]
   end
 
   def precompiler
     if !@precompiler
-
+      loader = File.read("#{Rails.root}/app/assets/javascripts/mini-loader.js")
       source = File.read("#{Rails.root}/app/assets/javascripts/discourse-common/addon/lib/raw-handlebars.js")
-      transpiler = DiscourseJsProcessor::Transpiler.new(skip_module: true)
-      transpiled = transpiler.perform(source)
 
-      # very hacky but lets us use ES6. I'm ashamed of this code -RW
-      transpiled = transpiled[transpiled.index('var RawHandlebars = ')...transpiled.index('export ')]
+      transpiled = DiscourseJsProcessor.transpile(source, "#{Rails.root}/app/assets/javascripts/", "discourse-common/lib/raw-handlebars")
 
-      @precompiler = StringIO.new <<~END
-        var __RawHandlebars;
-        (function() {
-          #{transpiled};
-          __RawHandlebars = RawHandlebars;
-        })();
+      @precompiler = StringIO.new <<~JS
+        let __RawHandlebars;
+
+        (function(){
+          #{loader}
+          define("handlebars", ["exports"], function(exports){ exports.default = Handlebars; })
+          #{transpiled}
+          __RawHandlebars = require("discourse-common/lib/raw-handlebars").default;
+        })()
 
         Barber = {
           precompile: function(string) {
             return __RawHandlebars.precompile(string, false).toString();
           }
         };
-      END
+      JS
+
     end
 
     @precompiler
@@ -111,10 +112,10 @@ class Ember::Handlebars::Template
       "define('#{module_name}', ['exports'], function(__exports__){ __exports__['default'] = #{template} });"
     when :global
       if raw
-        return <<~RAW_TEMPLATE
+        return <<~JS
           var __t = #{template};
           requirejs('discourse-common/lib/raw-templates').addRawTemplate(#{path_for(template_name, config)}, __t);
-        RAW_TEMPLATE
+        JS
       end
 
       target = global_template_target('Ember.TEMPLATES', template_name, config)

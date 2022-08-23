@@ -2,19 +2,21 @@ import {
   acceptance,
   count,
   exists,
-  queryAll,
+  query,
   selectDate,
   visible,
-  waitFor,
 } from "discourse/tests/helpers/qunit-helpers";
-import { click, fillIn, triggerKeyEvent, visit } from "@ember/test-helpers";
-import { skip, test } from "qunit";
+import { click, currentURL, fillIn, visit } from "@ember/test-helpers";
+import { test } from "qunit";
 import {
   SEARCH_TYPE_CATS_TAGS,
   SEARCH_TYPE_DEFAULT,
   SEARCH_TYPE_USERS,
 } from "discourse/controllers/full-page-search";
 import selectKit from "discourse/tests/helpers/select-kit-helper";
+
+let lastBody;
+let searchResultClickTracked = false;
 
 acceptance("Search - Full Page", function (needs) {
   needs.user();
@@ -91,12 +93,29 @@ acceptance("Search - Full Page", function (needs) {
         ],
       });
     });
+
+    server.put("/topics/bulk", (request) => {
+      lastBody = helper.parsePostData(request.requestBody);
+      return helper.response({ topic_ids: [130] });
+    });
+
+    server.post("/search/click", () => {
+      searchResultClickTracked = true;
+      return helper.response({ success: "OK" });
+    });
+  });
+
+  needs.hooks.afterEach(() => {
+    searchResultClickTracked = false;
   });
 
   test("perform various searches", async function (assert) {
     await visit("/search");
 
-    assert.ok($("body.search-page").length, "has body class");
+    assert.ok(
+      document.body.classList.contains("search-page"),
+      "has body class"
+    );
     assert.ok(exists(".search-container"), "has container class");
     assert.ok(exists(".search-query"));
     assert.ok(!exists(".fps-topic"));
@@ -117,7 +136,7 @@ acceptance("Search - Full Page", function (needs) {
   test("search for personal messages", async function (assert) {
     await visit("/search");
 
-    await fillIn(".search-query", "discourse in:personal");
+    await fillIn(".search-query", "discourse in:messages");
     await click(".search-cta");
 
     assert.strictEqual(count(".fps-topic"), 1, "has one post");
@@ -143,45 +162,6 @@ acceptance("Search - Full Page", function (needs) {
     );
   });
 
-  skip("update username through advanced search ui", async function (assert) {
-    await visit("/search");
-    await fillIn(".search-query", "none");
-    await fillIn(".search-advanced-options .user-selector", "admin");
-    await click(".search-advanced-options .user-selector");
-    await triggerKeyEvent(
-      ".search-advanced-options .user-selector",
-      "keydown",
-      8
-    );
-
-    waitFor(assert, async () => {
-      assert.ok(
-        visible(".search-advanced-options .autocomplete"),
-        '"autocomplete" popup is visible'
-      );
-      assert.ok(
-        exists(
-          '.search-advanced-options .autocomplete ul li a span.username:contains("admin")'
-        ),
-        '"autocomplete" popup has an entry for "admin"'
-      );
-
-      await click(
-        ".search-advanced-options .autocomplete ul li a:nth-of-type(1)"
-      );
-
-      assert.ok(
-        exists('.search-advanced-options span:contains("admin")'),
-        'has "admin" pre-populated'
-      );
-      assert.strictEqual(
-        queryAll(".search-query").val(),
-        "none @admin",
-        'has updated search term to "none user:admin"'
-      );
-    });
-  });
-
   test("update category through advanced search ui", async function (assert) {
     const categoryChooser = selectKit(
       ".search-advanced-options .category-chooser"
@@ -200,7 +180,7 @@ acceptance("Search - Full Page", function (needs) {
       'has "faq" populated'
     );
     assert.strictEqual(
-      queryAll(".search-query").val(),
+      query(".search-query").value,
       "none #faq",
       'has updated search term to "none #faq"'
     );
@@ -224,7 +204,7 @@ acceptance("Search - Full Page", function (needs) {
       'has "快乐的" populated'
     );
     assert.strictEqual(
-      queryAll(".search-query").val(),
+      query(".search-query").value,
       "none category:240",
       'has updated search term to "none category:240"'
     );
@@ -240,14 +220,14 @@ acceptance("Search - Full Page", function (needs) {
       'has "in title" populated'
     );
     assert.strictEqual(
-      queryAll(".search-query").val(),
+      query(".search-query").value,
       "none in:title",
       'has updated search term to "none in:title"'
     );
 
     await fillIn(".search-query", "none in:titleasd");
 
-    assert.not(
+    assert.notOk(
       exists(".search-advanced-options .in-title:checked"),
       "does not populate title only checkbox"
     );
@@ -263,13 +243,13 @@ acceptance("Search - Full Page", function (needs) {
       'has "I liked" populated'
     );
     assert.strictEqual(
-      queryAll(".search-query").val(),
+      query(".search-query").value,
       "none in:likes",
       'has updated search term to "none in:likes"'
     );
   });
 
-  test("update in:personal filter through advanced search ui", async function (assert) {
+  test("update in:messages filter through advanced search ui", async function (assert) {
     await visit("/search");
     await fillIn(".search-query", "none");
     await click(".search-advanced-options .in-private");
@@ -280,14 +260,14 @@ acceptance("Search - Full Page", function (needs) {
     );
 
     assert.strictEqual(
-      queryAll(".search-query").val(),
-      "none in:personal",
-      'has updated search term to "none in:personal"'
+      query(".search-query").value,
+      "none in:messages",
+      'has updated search term to "none in:messages"'
     );
 
     await fillIn(".search-query", "none in:personal-direct");
 
-    assert.not(
+    assert.notOk(
       exists(".search-advanced-options .in-private:checked"),
       "does not populate messages checkbox"
     );
@@ -304,14 +284,14 @@ acceptance("Search - Full Page", function (needs) {
     );
 
     assert.strictEqual(
-      queryAll(".search-query").val(),
+      query(".search-query").value,
       "none in:seen",
       "it should update the search term"
     );
 
     await fillIn(".search-query", "none in:seenasdan");
 
-    assert.not(
+    assert.notOk(
       exists(".search-advanced-options .in-seen:checked"),
       "does not populate seen checkbox"
     );
@@ -322,6 +302,7 @@ acceptance("Search - Full Page", function (needs) {
 
     await visit("/search");
 
+    await click(".advanced-filters > summary");
     await fillIn(".search-query", "none");
     await inSelector.expand();
     await inSelector.selectRowByValue("bookmarks");
@@ -332,7 +313,7 @@ acceptance("Search - Full Page", function (needs) {
       'has "I bookmarked" populated'
     );
     assert.strictEqual(
-      queryAll(".search-query").val(),
+      query(".search-query").value,
       "none in:bookmarks",
       'has updated search term to "none in:bookmarks"'
     );
@@ -345,6 +326,7 @@ acceptance("Search - Full Page", function (needs) {
 
     await visit("/search");
 
+    await click(".advanced-filters > summary");
     await fillIn(".search-query", "none");
     await statusSelector.expand();
     await statusSelector.selectRowByValue("closed");
@@ -355,7 +337,7 @@ acceptance("Search - Full Page", function (needs) {
       'has "are closed" populated'
     );
     assert.strictEqual(
-      queryAll(".search-query").val(),
+      query(".search-query").value,
       "none status:closed",
       'has updated search term to "none status:closed"'
     );
@@ -368,6 +350,7 @@ acceptance("Search - Full Page", function (needs) {
 
     await visit("/search");
 
+    await click(".advanced-filters > summary");
     await fillIn(".search-query", "status:none");
 
     assert.strictEqual(
@@ -382,6 +365,7 @@ acceptance("Search - Full Page", function (needs) {
 
     await visit("/search");
 
+    await click(".advanced-filters > summary");
     await fillIn(".search-query", "in:none");
 
     assert.strictEqual(
@@ -395,12 +379,13 @@ acceptance("Search - Full Page", function (needs) {
     await visit("/search?expanded=true&q=after:2018-08-22");
 
     assert.strictEqual(
-      queryAll(".search-query").val(),
+      query(".search-query").value,
       "after:2018-08-22",
       "it should update the search term correctly"
     );
 
     await visit("/search");
+    await click(".advanced-filters > summary");
 
     await fillIn(".search-query", "none");
     await selectDate(".date-picker#search-post-date", "2016-10-05");
@@ -418,7 +403,7 @@ acceptance("Search - Full Page", function (needs) {
     );
 
     assert.strictEqual(
-      queryAll(".search-query").val(),
+      query(".search-query").value,
       "none after:2016-10-05",
       'has updated search term to "none after:2016-10-05"'
     );
@@ -426,18 +411,17 @@ acceptance("Search - Full Page", function (needs) {
 
   test("update min post count through advanced search ui", async function (assert) {
     await visit("/search");
+    await click(".advanced-filters > summary");
     await fillIn(".search-query", "none");
     await fillIn("#search-min-post-count", "5");
 
     assert.strictEqual(
-      queryAll(
-        ".search-advanced-additional-options #search-min-post-count"
-      ).val(),
+      query(".search-advanced-additional-options #search-min-post-count").value,
       "5",
       'has "5" populated'
     );
     assert.strictEqual(
-      queryAll(".search-query").val(),
+      query(".search-query").value,
       "none min_posts:5",
       'has updated search term to "none min_posts:5"'
     );
@@ -445,18 +429,17 @@ acceptance("Search - Full Page", function (needs) {
 
   test("update max post count through advanced search ui", async function (assert) {
     await visit("/search");
+    await click(".advanced-filters > summary");
     await fillIn(".search-query", "none");
     await fillIn("#search-max-post-count", "5");
 
     assert.strictEqual(
-      queryAll(
-        ".search-advanced-additional-options #search-max-post-count"
-      ).val(),
+      query(".search-advanced-additional-options #search-max-post-count").value,
       "5",
       'has "5" populated'
     );
     assert.strictEqual(
-      queryAll(".search-query").val(),
+      query(".search-query").value,
       "none max_posts:5",
       'has updated search term to "none max_posts:5"'
     );
@@ -472,14 +455,14 @@ acceptance("Search - Full Page", function (needs) {
     );
 
     assert.strictEqual(
-      queryAll(".search-query").val(),
+      query(".search-query").value,
       "in:likes",
       'has updated search term to "in:likes"'
     );
 
     await fillIn(".search-query", "in:likesasdas");
 
-    assert.not(
+    assert.notOk(
       exists(".search-advanced-options .in-likes:checked"),
       "does not populate the likes checkbox"
     );
@@ -507,6 +490,7 @@ acceptance("Search - Full Page", function (needs) {
     await fillIn(".search-query", "admin");
     assert.ok(!exists(".fps-user-item"), "has no user results");
 
+    await click(".advanced-filters > summary");
     await typeSelector.expand();
     await typeSelector.selectRowByValue(SEARCH_TYPE_USERS);
 
@@ -534,6 +518,7 @@ acceptance("Search - Full Page", function (needs) {
 
     assert.ok(!exists(".fps-tag-item"), "has no category/tag results");
 
+    await click(".advanced-filters > summary");
     await typeSelector.expand();
     await typeSelector.selectRowByValue(SEARCH_TYPE_CATS_TAGS);
     await click(".search-cta");
@@ -562,15 +547,15 @@ acceptance("Search - Full Page", function (needs) {
     await fillIn(".search-query", "none");
     await click(".search-cta");
 
-    assert.ok(
-      !visible(".search-advanced-options"),
+    assert.notOk(
+      exists(".advanced-filters[open]"),
       "launching a search collapses advanced filters"
     );
 
     await visit("/search");
 
-    assert.ok(
-      !visible(".search-advanced-options"),
+    assert.notOk(
+      exists(".advanced-filters[open]"),
       "filters are collapsed when query param is not present"
     );
 
@@ -579,5 +564,40 @@ acceptance("Search - Full Page", function (needs) {
       visible(".search-advanced-options"),
       "clicking on element expands filters"
     );
+  });
+
+  test("bulk operations work", async function (assert) {
+    await visit("/search");
+    await fillIn(".search-query", "discourse");
+    await click(".search-cta");
+    await click(".bulk-select"); // toggle bulk
+    await click(".bulk-select-visible .btn:nth-child(2)"); // select all
+    await click(".bulk-select-btn"); // show bulk actions
+    await click(".topic-bulk-actions-modal .btn:nth-child(2)"); // close topics
+    assert.equal(lastBody["topic_ids[]"], 130);
+  });
+
+  test("adds visited class to visited topics", async function (assert) {
+    await visit("/search");
+
+    await fillIn(".search-query", "discourse");
+    await click(".search-cta");
+    assert.equal(count(".visited"), 0);
+
+    await fillIn(".search-query", "discourse visited");
+    await click(".search-cta");
+    assert.equal(count(".visited"), 1);
+  });
+
+  test("result link click tracking is invoked", async function (assert) {
+    await visit("/search");
+
+    await fillIn(".search-query", "discourse");
+    await click(".search-cta");
+
+    await click("a.search-link:first-child");
+
+    assert.strictEqual(currentURL(), "/t/lorem-ipsum-dolor-sit-amet/130");
+    assert.ok(searchResultClickTracked);
   });
 });

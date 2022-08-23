@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe DoNotDisturbController do
+RSpec.describe DoNotDisturbController do
   it 'requires you to be logged in' do
     post "/do-not-disturb.json", params: { duration: 30 }
     expect(response.status).to eq(403)

@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Jobs::DeleteReplies do
+RSpec.describe Jobs::DeleteReplies do
   fab!(:admin) { Fabricate(:admin) }
 
   fab!(:topic) { Fabricate(:topic) }

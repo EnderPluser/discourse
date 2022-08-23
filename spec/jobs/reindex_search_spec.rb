@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Jobs::ReindexSearch do
+RSpec.describe Jobs::ReindexSearch do
   before do
     SearchIndexer.enable
     Jobs.run_immediately!

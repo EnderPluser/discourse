@@ -15,7 +15,7 @@ class Invite < ActiveRecord::Base
   }
 
   BULK_INVITE_EMAIL_LIMIT = 200
-  HOSTNAME_REGEX = /\A(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])\z/
+  DOMAIN_REGEX = /\A(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)+([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])\z/
 
   rate_limit :limit_invites_per_day
 
@@ -32,7 +32,7 @@ class Invite < ActiveRecord::Base
   validates :email, email: true, allow_blank: true
   validate :ensure_max_redemptions_allowed
   validate :valid_domain, if: :will_save_change_to_domain?
-  validate :user_doesnt_already_exist
+  validate :user_doesnt_already_exist, if: :will_save_change_to_email?
 
   before_create do
     self.invite_key ||= SecureRandom.base58(10)
@@ -49,25 +49,20 @@ class Invite < ActiveRecord::Base
     self.email = Email.downcase(email) unless email.nil?
   end
 
-  attr_accessor :email_already_exists
+  attribute :email_already_exists
 
   def self.emailed_status_types
     @emailed_status_types ||= Enum.new(not_required: 0, pending: 1, bulk_pending: 2, sending: 3, sent: 4)
   end
 
   def user_doesnt_already_exist
-    @email_already_exists = false
+    self.email_already_exists = false
     return if email.blank?
     user = Invite.find_user_by_email(email)
 
     if user && user.id != self.invited_users&.first&.user_id
-      @email_already_exists = true
-      errors.add(:base, I18n.t(
-        "invite.user_exists",
-        email: email,
-        username: user.username,
-        base_path: Discourse.base_path
-      ))
+      self.email_already_exists = true
+      errors.add(:base, user_exists_error_msg(email))
     end
   end
 
@@ -105,14 +100,7 @@ class Invite < ActiveRecord::Base
 
     email = Email.downcase(opts[:email]) if opts[:email].present?
 
-    if user = find_user_by_email(email)
-      raise UserExists.new(I18n.t(
-        "invite.user_exists",
-        email: email,
-        username: user.username,
-        base_path: Discourse.base_path
-      ))
-    end
+    raise UserExists.new(new.user_exists_error_msg(email)) if find_user_by_email(email)
 
     if email.present?
       invite = Invite
@@ -125,6 +113,8 @@ class Invite < ActiveRecord::Base
         invite.destroy
         invite = nil
       end
+      email_digest = Digest::SHA256.hexdigest(email)
+      RateLimiter.new(invited_by, "reinvites-per-day-#{email_digest}", 3, 1.day.to_i).performed!
     end
 
     emailed_status = if opts[:skip_email] || invite&.emailed_status == emailed_status_types[:not_required]
@@ -177,11 +167,8 @@ class Invite < ActiveRecord::Base
   def redeem(email: nil, username: nil, name: nil, password: nil, user_custom_fields: nil, ip_address: nil, session: nil, email_token: nil)
     return if !redeemable?
 
-    if is_invite_link? && UserEmail.exists?(email: email)
-      raise UserExists.new I18n.t("invite_link.email_taken")
-    end
-
     email = self.email if email.blank? && !is_invite_link?
+
     InviteRedeemer.new(
       invite: self,
       email: email,
@@ -197,7 +184,9 @@ class Invite < ActiveRecord::Base
 
   def self.redeem_from_email(email)
     invite = Invite.find_by(email: Email.downcase(email))
-    InviteRedeemer.new(invite: invite, email: invite.email).redeem if invite
+    if invite.present? && invite.redeemable?
+      InviteRedeemer.new(invite: invite, email: invite.email).redeem
+    end
     invite
   end
 
@@ -249,23 +238,6 @@ class Invite < ActiveRecord::Base
     Jobs.enqueue(:invite_email, invite_id: self.id)
   end
 
-  def warnings(guardian)
-    @warnings ||= begin
-      warnings = []
-
-      topic = self.topics.first
-      if topic&.read_restricted_category?
-        topic_groups = topic.category.groups
-        if (self.groups & topic_groups).blank?
-          editable_topic_groups = topic_groups.filter { |g| guardian.can_edit_group?(g) }
-          warnings << I18n.t("invite.requires_groups", groups: editable_topic_groups.pluck(:name).join(", "))
-        end
-      end
-
-      warnings
-    end
-  end
-
   def limit_invites_per_day
     RateLimiter.new(invited_by, "invites-per-day", SiteSetting.max_invites_per_day, 1.day.to_i)
   end
@@ -292,9 +264,13 @@ class Invite < ActiveRecord::Base
 
     self.domain.downcase!
 
-    if self.domain !~ Invite::HOSTNAME_REGEX
-      self.errors.add(:base, I18n.t('invite.domain_not_allowed', domain: self.domain))
+    if self.domain !~ Invite::DOMAIN_REGEX
+      self.errors.add(:base, I18n.t('invite.domain_not_allowed'))
     end
+  end
+
+  def user_exists_error_msg(email)
+    I18n.t("invite.user_exists", email: CGI.escapeHTML(email))
   end
 end
 

@@ -38,7 +38,10 @@ class DiscoursePoll::Poll
 
     # Ensure consistency here as we do not have a unique index to limit the
     # number of votes per the poll's configuration.
-    DB.query(<<~SQL, poll_id: poll_id, user_id: user.id, offset: serialized_poll[:type] == "multiple" ? serialized_poll[:max] : 1)
+    is_multiple = serialized_poll[:type] == "multiple"
+    offset = is_multiple ? (serialized_poll[:max] || serialized_poll[:options].length) : 1
+
+    DB.query(<<~SQL, poll_id: poll_id, user_id: user.id, offset: offset)
     DELETE FROM poll_votes
     USING (
       SELECT
@@ -283,6 +286,7 @@ class DiscoursePoll::Poll
   def self.extract(raw, topic_id, user_id = nil)
     # TODO: we should fix the callback mess so that the cooked version is available
     # in the validators instead of cooking twice
+    raw = raw.sub(/\[quote.+\/quote\]/m, '')
     cooked = PrettyText.cook(raw, topic_id: topic_id, user_id: user_id)
 
     Nokogiri::HTML5(cooked).css("div.poll").map do |p|
@@ -315,12 +319,12 @@ class DiscoursePoll::Poll
     num_of_options = options.length
 
     if poll.multiple?
-      if num_of_options < poll.min
+      if poll.min && (num_of_options < poll.min)
         raise DiscoursePoll::Error.new(I18n.t(
           "poll.min_vote_per_user",
           count: poll.min
         ))
-      elsif num_of_options > poll.max
+      elsif poll.max && (num_of_options > poll.max)
         raise DiscoursePoll::Error.new(I18n.t(
           "poll.max_vote_per_user",
           count: poll.max

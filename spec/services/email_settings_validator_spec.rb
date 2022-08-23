@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
 RSpec.describe EmailSettingsValidator do
   let(:username) { "kwest@gmail.com" }
   let(:password) { "mbdtf" }
@@ -114,7 +112,7 @@ RSpec.describe EmailSettingsValidator do
 
     it "logs a warning if debug: true passed in and still raises the error" do
       Rails.logger.expects(:warn).with(regexp_matches(/\[EmailSettingsValidator\] Error encountered/)).at_least_once
-      net_smtp_stub.stubs(:start).raises(Net::SMTPAuthenticationError, "invalid credentials")
+      net_smtp_stub.stubs(:start).raises(Net::SMTPAuthenticationError, stub(message: "invalid credentials"))
       expect { subject.class.validate_smtp(host: host, port: port, username: username, password: password, debug: true, domain: domain) }.to raise_error(Net::SMTPAuthenticationError)
     end
 

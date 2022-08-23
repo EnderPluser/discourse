@@ -2,12 +2,12 @@ import {
   acceptance,
   count,
   exists,
-  queryAll,
+  query,
 } from "discourse/tests/helpers/qunit-helpers";
 import { click, visit } from "@ember/test-helpers";
 import { action } from "@ember/object";
 import { extraConnectorClass } from "discourse/lib/plugin-connectors";
-import hbs from "htmlbars-inline-precompile";
+import { hbs } from "ember-cli-htmlbars";
 import { test } from "qunit";
 
 const PREFIX = "javascripts/single-test/connectors";
@@ -48,23 +48,29 @@ acceptance("Plugin Outlet - Connector Class", function (needs) {
       },
     });
 
+    // eslint-disable-next-line no-undef
     Ember.TEMPLATES[
       `${PREFIX}/user-profile-primary/hello`
     ] = hbs`<span class='hello-username'>{{model.username}}</span>
         <button class='say-hello' {{action "sayHello"}}></button>
         <span class='hello-result'>{{hello}}</span>`;
+    // eslint-disable-next-line no-undef
     Ember.TEMPLATES[
       `${PREFIX}/user-profile-primary/hi`
     ] = hbs`<button class='say-hi' {{action "sayHi"}}></button>
         <span class='hi-result'>{{hi}}</span>`;
+    // eslint-disable-next-line no-undef
     Ember.TEMPLATES[
       `${PREFIX}/user-profile-primary/dont-render`
     ] = hbs`I'm not rendered!`;
   });
 
   needs.hooks.afterEach(() => {
+    // eslint-disable-next-line no-undef
     delete Ember.TEMPLATES[`${PREFIX}/user-profile-primary/hello`];
+    // eslint-disable-next-line no-undef
     delete Ember.TEMPLATES[`${PREFIX}/user-profile-primary/hi`];
+    // eslint-disable-next-line no-undef
     delete Ember.TEMPLATES[`${PREFIX}/user-profile-primary/dont-render`];
   });
 
@@ -82,14 +88,14 @@ acceptance("Plugin Outlet - Connector Class", function (needs) {
 
     await click(".say-hello");
     assert.strictEqual(
-      queryAll(".hello-result").text(),
+      query(".hello-result").innerText,
       "hello!",
       "actions delegate properly"
     );
 
     await click(".say-hi");
     assert.strictEqual(
-      queryAll(".hi-result").text(),
+      query(".hi-result").innerText,
       "hi!",
       "actions delegate properly"
     );

@@ -1,10 +1,8 @@
 # frozen_string_literal: true
 
-require "rails_helper"
 require "import_export"
 
-describe ImportExport::Importer do
-
+RSpec.describe ImportExport::Importer do
   before do
     STDOUT.stubs(:write)
   end
@@ -18,8 +16,7 @@ describe ImportExport::Importer do
     ImportExport::Importer.new(data).perform
   end
 
-  context '.perform' do
-
+  describe '.perform' do
     it 'topics and users' do
       data = import_data.dup
       data[:categories] = nil
@@ -27,13 +24,13 @@ describe ImportExport::Importer do
 
       expect {
         import(data)
-      }.to change { Category.count }.by(0)
-        .and change { Group.count }.by(0)
+      }.to not_change { Category.count }
+        .and not_change { Group.count }
         .and change { Topic.count }.by(2)
         .and change { User.count }.by(2)
     end
 
-    context 'categories and groups' do
+    context 'with categories and groups' do
       it 'works' do
         data = import_data.dup
         data[:topics] = nil
@@ -44,7 +41,7 @@ describe ImportExport::Importer do
         }.to change { Category.count }.by(6)
           .and change { Group.count }.by(2)
           .and change { Topic.count }.by(6)
-          .and change { User.count }.by(0)
+          .and not_change { User.count }
       end
 
       it 'works with sub-sub-categories' do
@@ -92,10 +89,10 @@ describe ImportExport::Importer do
 
       expect {
         import(data)
-      }.to change { Category.count }.by(0)
+      }.to not_change { Category.count }
         .and change { Group.count }.by(2)
-        .and change { Topic.count }.by(0)
-        .and change { User.count }.by(0)
+        .and not_change { Topic.count }
+        .and not_change { User.count }
     end
 
     it 'all' do
@@ -106,7 +103,5 @@ describe ImportExport::Importer do
         .and change { Topic.count }.by(8)
         .and change { User.count }.by(2)
     end
-
   end
-
 end

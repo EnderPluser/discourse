@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
 def generate_html(text, opts = {})
   output = "<p><span"
   output += " data-date=\"#{opts[:date]}\"" if opts[:date]
@@ -16,12 +14,12 @@ def generate_html(text, opts = {})
   output + "</span></p>"
 end
 
-describe PrettyText do
+RSpec.describe PrettyText do
   before do
     freeze_time
   end
 
-  context 'emails simplified rendering' do
+  describe 'emails simplified rendering' do
     it 'works with default markup' do
       cooked = PrettyText.cook("[date=2018-05-08]")
       cooked_mail = generate_html("2018-05-08T00:00:00Z UTC",
@@ -72,7 +70,7 @@ describe PrettyText do
     end
   end
 
-  context 'excerpt simplified rendering' do
+  describe 'excerpt simplified rendering' do
     let(:post) { Fabricate(:post, raw: '[date=2019-10-16 time=14:00:00 format="LLLL" timezone="America/New_York"]') }
 
     it 'adds UTC' do
@@ -81,7 +79,7 @@ describe PrettyText do
     end
   end
 
-  context 'special quotes' do
+  describe 'special quotes' do
     it 'converts special quotes to regular quotes' do
       # german
       post = Fabricate(:post, raw: '[date=2019-10-16 time=14:00:00 format="LLLL" timezone=„America/New_York“]')
@@ -99,7 +97,7 @@ describe PrettyText do
     end
   end
 
-  context 'french quotes' do
+  describe 'french quotes' do
     let(:post) { Fabricate(:post, raw: '[date=2019-10-16 time=14:00:00 format="LLLL" timezone=«America/New_York»]') }
 
     it 'converts french quotes to regular quotes' do

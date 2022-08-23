@@ -185,6 +185,7 @@ header .discourse-tag {
   margin-bottom: 20px;
   a {
     text-decoration: underline;
+    display: inline-flex;
   }
   span.active a {
     font-weight: bold;
@@ -368,6 +369,11 @@ section.tag-info {
           background: transparent;
         }
       }
+    }
+    .edit-tag {
+      color: var(--primary-high);
+      font-size: $font-down-2;
+      margin-left: 0.5em;
     }
   }
 

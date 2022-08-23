@@ -8,12 +8,6 @@ class QunitController < ApplicationController
   }
   layout false
 
-  # only used in test / dev
-  def index
-    raise Discourse::NotFound.new if request.headers["HTTP_X_DISCOURSE_EMBER_CLI"] == "true"
-    raise Discourse::InvalidAccess.new if Rails.env.production?
-  end
-
   def theme
     raise Discourse::NotFound.new if !can_see_theme_qunit?
 

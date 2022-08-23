@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe Onebox::Engine::GfycatOnebox do
+RSpec.describe Onebox::Engine::GfycatOnebox do
   let(:link) { "https://gfycat.com/shrillnegativearrowana" }
   let(:html) { described_class.new(link).to_html }
   let(:placeholder_html) { described_class.new(link).placeholder_html }

@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe 'Setting changes' do
+RSpec.describe 'Setting changes' do
   describe '#must_approve_users' do
     before { SiteSetting.must_approve_users = false }
 

@@ -74,7 +74,7 @@ class BulkImport::Base
 
   def initialize
     charset = ENV["DB_CHARSET"] || "utf8"
-    db = ActiveRecord::Base.connection_config
+    db = ActiveRecord::Base.connection_db_config.configuration_hash
     @encoder = PG::TextEncoder::CopyRow.new
     @raw_connection = PG.connect(dbname: db[:database], port: db[:port])
     @uploader = ImportScripts::Uploader.new
@@ -431,6 +431,11 @@ class BulkImport::Base
     user[:last_emailed_at] ||= NOW
     user[:created_at] ||= NOW
     user[:updated_at] ||= user[:created_at]
+
+    if (date_of_birth = user[:date_of_birth]).is_a?(Date) && date_of_birth.year != 1904
+      user[:date_of_birth] = Date.new(1904, date_of_birth.month, date_of_birth.day)
+    end
+
     user
   end
 
@@ -447,7 +452,7 @@ class BulkImport::Base
     user_email[:email] ||= random_email
     user_email[:email].downcase!
     # unique email
-    user_email[:email] = random_email until user_email[:email] =~ EmailValidator.email_regex && !@emails.has_key?(user_email[:email])
+    user_email[:email] = random_email until EmailAddressValidator.valid_value?(user_email[:email]) && !@emails.has_key?(user_email[:email])
 
     user_email
   end

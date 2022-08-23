@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe Onebox::Engine::YoukuOnebox do
+RSpec.describe Onebox::Engine::YoukuOnebox do
   before do
     stub_request(:get, 'http://v.youku.com/v_show/id_XNjM3MzAxNzc2.html')
       .to_return(status: 200, body: onebox_response('youku'), headers: { content_type: 'text/html' })

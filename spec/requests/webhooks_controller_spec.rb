@@ -1,15 +1,12 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe WebhooksController do
+RSpec.describe WebhooksController do
   before { Discourse.redis.flushdb }
 
   let(:email) { "em@il.com" }
   let(:message_id) { "12345@il.com" }
 
-  context "mailgun" do
-
+  describe "#mailgun" do
     let(:token) { "705a8ccd2ce932be8e98c221fe701c1b4a0afcb8bbd57726de" }
     let(:timestamp) { Time.now.to_i }
     let(:data) { "#{timestamp}#{token}" }
@@ -17,6 +14,11 @@ describe WebhooksController do
 
     before do
       SiteSetting.mailgun_api_key = "key-8221462f0c915af3f6f2e2df7aa5a493"
+      ActionController::Base.allow_forgery_protection = true # Ensure the endpoint works, even with CSRF protection generally enabled
+    end
+
+    after do
+      ActionController::Base.allow_forgery_protection = false
     end
 
     it "works (deprecated)" do
@@ -29,13 +31,16 @@ describe WebhooksController do
         "event" => "dropped",
         "recipient" => email,
         "Message-Id" => "<#{message_id}>",
-        "signature" => signature
+        "signature" => signature,
+        "error" => "smtp; 550-5.1.1 The email account that you tried to reach does not exist.",
+        "code" => "5.1.1"
       }
 
       expect(response.status).to eq(200)
 
       email_log.reload
       expect(email_log.bounced).to eq(true)
+      expect(email_log.bounce_error_code).to eq("5.1.1")
       expect(email_log.user.user_stat.bounce_score).to eq(SiteSetting.hard_bounce_score)
     end
 
@@ -58,6 +63,11 @@ describe WebhooksController do
               "message-id" => message_id,
             }
           }
+        },
+        "delivery-status" => {
+          "message" => "smtp; 550-5.1.1 The email account that you tried to reach does not exist.",
+          "code" => "5.1.1",
+          "description" => ""
         }
       }
 
@@ -65,11 +75,12 @@ describe WebhooksController do
 
       email_log.reload
       expect(email_log.bounced).to eq(true)
+      expect(email_log.bounce_error_code).to eq("5.1.1")
       expect(email_log.user.user_stat.bounce_score).to eq(SiteSetting.soft_bounce_score)
     end
   end
 
-  context "sendgrid" do
+  describe "#sendgrid" do
     it "works" do
       user = Fabricate(:user, email: email)
       email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
@@ -89,11 +100,12 @@ describe WebhooksController do
 
       email_log.reload
       expect(email_log.bounced).to eq(true)
+      expect(email_log.bounce_error_code).to eq("5.0.0")
       expect(email_log.user.user_stat.bounce_score).to eq(SiteSetting.hard_bounce_score)
     end
   end
 
-  context "mailjet" do
+  describe "#mailjet" do
     it "works" do
       user = Fabricate(:user, email: email)
       email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
@@ -109,11 +121,12 @@ describe WebhooksController do
 
       email_log.reload
       expect(email_log.bounced).to eq(true)
+      expect(email_log.bounce_error_code).to eq(nil) # mailjet doesn't give us this
       expect(email_log.user.user_stat.bounce_score).to eq(SiteSetting.hard_bounce_score)
     end
   end
 
-  context "mandrill" do
+  describe "#mandrill" do
     it "works" do
       user = Fabricate(:user, email: email)
       email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
@@ -123,6 +136,8 @@ describe WebhooksController do
           "event" => "hard_bounce",
           "msg" => {
             "email" => email,
+            "diag" => "5.1.1",
+            "bounce_description": "smtp; 550-5.1.1 The email account that you tried to reach does not exist.",
             "metadata" => {
               "message_id" => message_id
             }
@@ -134,11 +149,20 @@ describe WebhooksController do
 
       email_log.reload
       expect(email_log.bounced).to eq(true)
+      expect(email_log.bounce_error_code).to eq("5.1.1")
       expect(email_log.user.user_stat.bounce_score).to eq(SiteSetting.hard_bounce_score)
     end
   end
 
-  context "postmark" do
+  describe "#mandrill_head" do
+    it "works" do
+      head "/webhooks/mandrill.json"
+
+      expect(response.status).to eq(200)
+    end
+  end
+
+  describe "#postmark" do
     it "works" do
       user = Fabricate(:user, email: email)
       email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
@@ -152,6 +176,7 @@ describe WebhooksController do
 
       email_log.reload
       expect(email_log.bounced).to eq(true)
+      expect(email_log.bounce_error_code).to eq(nil) # postmark doesn't give us this
       expect(email_log.user.user_stat.bounce_score).to eq(SiteSetting.hard_bounce_score)
     end
     it "soft bounces" do
@@ -167,11 +192,12 @@ describe WebhooksController do
 
       email_log.reload
       expect(email_log.bounced).to eq(true)
+      expect(email_log.bounce_error_code).to eq(nil) # postmark doesn't give us this
       expect(email_log.user.user_stat.bounce_score).to eq(SiteSetting.soft_bounce_score)
     end
   end
 
-  context "sparkpost" do
+  describe "#sparkpost" do
     it "works" do
       user = Fabricate(:user, email: email)
       email_log = Fabricate(:email_log, user: user, message_id: message_id, to_address: email)
@@ -181,6 +207,7 @@ describe WebhooksController do
           "msys" => {
             "message_event" => {
               "bounce_class" => 10,
+              "error_code" => "554",
               "rcpt_to" => email,
               "rcpt_meta" => {
                 "message_id" => message_id

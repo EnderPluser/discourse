@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe TopicGroup do
+RSpec.describe TopicGroup do
   describe '#update_last_read' do
     fab!(:group) { Fabricate(:group) }
     fab!(:user) { Fabricate(:user) }

@@ -2,7 +2,8 @@ import PanEvents, {
   SWIPE_DISTANCE_THRESHOLD,
   SWIPE_VELOCITY_THRESHOLD,
 } from "discourse/mixins/pan-events";
-import { cancel, later, schedule } from "@ember/runloop";
+import { cancel, schedule } from "@ember/runloop";
+import discourseLater from "discourse-common/lib/later";
 import Docking from "discourse/mixins/docking";
 import MountWidget from "discourse/components/mount-widget";
 import ItsATrap from "@discourse/itsatrap";
@@ -29,7 +30,9 @@ const SiteHeaderComponent = MountWidget.extend(
     @observes(
       "currentUser.unread_notifications",
       "currentUser.unread_high_priority_notifications",
-      "currentUser.reviewable_count",
+      "currentUser.all_unread_notifications_count",
+      "currentUser.reviewable_count", // TODO: remove this when redesigned_user_menu_enabled is removed
+      "currentUser.unseen_reviewable_count",
       "session.defaultColorSchemeIsDark",
       "session.darkModeAvailable"
     )
@@ -41,7 +44,7 @@ const SiteHeaderComponent = MountWidget.extend(
       const headerCloak = document.querySelector(".header-cloak");
       panel.classList.add("animate");
       headerCloak.classList.add("animate");
-      this._scheduledRemoveAnimate = later(() => {
+      this._scheduledRemoveAnimate = discourseLater(() => {
         panel.classList.remove("animate");
         headerCloak.classList.remove("animate");
       }, 200);
@@ -59,7 +62,7 @@ const SiteHeaderComponent = MountWidget.extend(
       const offsetDirection = menuOrigin === "left" ? -1 : 1;
       panel.style.setProperty("--offset", `${offsetDirection * windowWidth}px`);
       headerCloak.style.setProperty("--opacity", 0);
-      this._scheduledRemoveAnimate = later(() => {
+      this._scheduledRemoveAnimate = discourseLater(() => {
         panel.classList.remove("animate");
         headerCloak.classList.remove("animate");
         schedule("afterRender", () => {
@@ -75,14 +78,6 @@ const SiteHeaderComponent = MountWidget.extend(
 
     _leftMenuClass() {
       return this._isRTL() ? "user-menu" : "hamburger-panel";
-    },
-
-    _leftMenuAction() {
-      return this._isRTL() ? "toggleUserMenu" : "toggleHamburger";
-    },
-
-    _rightMenuAction() {
-      return this._isRTL() ? "toggleHamburger" : "toggleUserMenu";
     },
 
     _handlePanDone(event) {
@@ -172,7 +167,7 @@ const SiteHeaderComponent = MountWidget.extend(
       }
     },
 
-    dockCheck(info) {
+    dockCheck() {
       const header = document.querySelector("header.d-header");
 
       if (this.docAt === null) {
@@ -182,21 +177,9 @@ const SiteHeaderComponent = MountWidget.extend(
         this.docAt = header.offsetTop;
       }
 
-      const offset = info.offset();
-      const headerRect = header.getBoundingClientRect();
-      const doc = document.documentElement;
-      let headerOffset = headerRect.top + headerRect.height;
-
-      if (window.scrollY < 0) {
-        headerOffset -= window.scrollY;
-      }
-
-      const newValue = `${headerOffset}px`;
-      if (newValue !== this.currentHeaderOffsetValue) {
-        this.currentHeaderOffsetValue = newValue;
-        doc.style.setProperty("--header-offset", newValue);
-      }
-
+      const main = document.querySelector(".ember-application");
+      const offsetTop = main ? main.offsetTop : 0;
+      const offset = window.pageYOffset - offsetTop;
       if (offset >= this.docAt) {
         if (!this.dockedHeader) {
           document.body.classList.add("docked");
@@ -230,11 +213,30 @@ const SiteHeaderComponent = MountWidget.extend(
       this.appEvents.on("header:show-topic", this, "setTopic");
       this.appEvents.on("header:hide-topic", this, "setTopic");
 
+      if (this.currentUser?.redesigned_user_menu_enabled) {
+        this.appEvents.on("user-menu:rendered", this, "_animateMenu");
+      }
+
+      if (
+        this.siteSettings.enable_experimental_sidebar_hamburger &&
+        !this.sidebarEnabled
+      ) {
+        this.appEvents.on(
+          "sidebar-hamburger-dropdown:rendered",
+          this,
+          "_animateMenu"
+        );
+      }
+
       this.dispatch("notifications:changed", "user-notifications");
       this.dispatch("header:keyboard-trigger", "header");
       this.dispatch("user-menu:navigation", "user-menu");
 
       this.appEvents.on("dom:clean", this, "_cleanDom");
+
+      if (this.currentUser) {
+        this.currentUser.on("status-changed", this, "queueRerender");
+      }
 
       if (
         this.currentUser &&
@@ -273,7 +275,40 @@ const SiteHeaderComponent = MountWidget.extend(
 
       const header = document.querySelector("header.d-header");
       this._itsatrap = new ItsATrap(header);
-      this._itsatrap.bind(["right", "left"], (e) => {
+      const dirs = this.currentUser?.redesigned_user_menu_enabled
+        ? ["up", "down"]
+        : ["right", "left"];
+      this._itsatrap.bind(dirs, (e) => this._handleArrowKeysNav(e));
+    },
+
+    _handleArrowKeysNav(event) {
+      if (this.currentUser?.redesigned_user_menu_enabled) {
+        const activeTab = document.querySelector(
+          ".menu-tabs-container .btn.active"
+        );
+        if (activeTab) {
+          let activeTabNumber = Number(
+            document.activeElement.dataset.tabNumber ||
+              activeTab.dataset.tabNumber
+          );
+          const maxTabNumber =
+            document.querySelectorAll(".menu-tabs-container .btn").length - 1;
+          const isNext = event.key === "ArrowDown";
+          let nextTab = isNext ? activeTabNumber + 1 : activeTabNumber - 1;
+          if (isNext && nextTab > maxTabNumber) {
+            nextTab = 0;
+          }
+          if (!isNext && nextTab < 0) {
+            nextTab = maxTabNumber;
+          }
+          event.preventDefault();
+          document
+            .querySelector(
+              `.menu-tabs-container .btn[data-tab-number='${nextTab}']`
+            )
+            .focus();
+        }
+      } else {
         const activeTab = document.querySelector(".glyphs .menu-link.active");
 
         if (activeTab) {
@@ -283,11 +318,11 @@ const SiteHeaderComponent = MountWidget.extend(
           }
 
           this.appEvents.trigger("user-menu:navigation", {
-            key: e.key,
+            key: event.key,
             tabNumber: Number(focusedTab.dataset.tabNumber),
           });
         }
-      });
+      }
     },
 
     _cleanDom() {
@@ -305,6 +340,24 @@ const SiteHeaderComponent = MountWidget.extend(
       this.appEvents.off("header:show-topic", this, "setTopic");
       this.appEvents.off("header:hide-topic", this, "setTopic");
       this.appEvents.off("dom:clean", this, "_cleanDom");
+      if (this.currentUser?.redesigned_user_menu_enabled) {
+        this.appEvents.off("user-menu:rendered", this, "_animateMenu");
+      }
+
+      if (
+        this.siteSettings.enable_experimental_sidebar_hamburger &&
+        !this.sidebarEnabled
+      ) {
+        this.appEvents.off(
+          "sidebar-hamburger-dropdown:rendered",
+          this,
+          "_animateMenu"
+        );
+      }
+
+      if (this.currentUser) {
+        this.currentUser.off("status-changed", this, "queueRerender");
+      }
 
       cancel(this._scheduledRemoveAnimate);
 
@@ -318,6 +371,7 @@ const SiteHeaderComponent = MountWidget.extend(
       return {
         topic: this._topic,
         canSignUp: this.canSignUp,
+        sidebarEnabled: this.sidebarEnabled,
       };
     },
 
@@ -328,8 +382,12 @@ const SiteHeaderComponent = MountWidget.extend(
           cb(this._topic, headerTitle, "header-title")
         );
       }
+      this._animateMenu();
+    },
 
+    _animateMenu() {
       const menuPanels = document.querySelectorAll(".menu-panel");
+
       if (menuPanels.length === 0) {
         if (this.site.mobileView) {
           this._animate = true;
@@ -338,11 +396,7 @@ const SiteHeaderComponent = MountWidget.extend(
       }
 
       const windowWidth = document.body.offsetWidth;
-      const headerWidth =
-        document.querySelector("#main-outlet .container").offsetWidth || 1100;
-      const remaining = (windowWidth - headerWidth) / 2;
-      const viewMode =
-        this.site.mobileView || remaining < 50 ? "slide-in" : "drop-down";
+      const viewMode = this.site.mobileView ? "slide-in" : "drop-down";
 
       menuPanels.forEach((panel) => {
         const headerCloak = document.querySelector(".header-cloak");
@@ -376,7 +430,7 @@ const SiteHeaderComponent = MountWidget.extend(
         // We use a mutationObserver to check for style changes, so it's important
         // we don't set it if it doesn't change. Same goes for the panelBody!
 
-        if (viewMode === "drop-down") {
+        if (!this.site.mobileView) {
           const buttonPanel = document.querySelectorAll("header ul.icons");
           if (buttonPanel.length === 0) {
             return;
@@ -388,23 +442,18 @@ const SiteHeaderComponent = MountWidget.extend(
             panel.style.setProperty("top", "100%");
             panel.style.setProperty("height", "auto");
           }
-
-          document.body.classList.add("drop-down-mode");
         } else {
-          if (this.site.mobileView) {
-            headerCloak.style.display = "block";
-          }
+          headerCloak.style.display = "block";
 
-          const menuTop = this.site.mobileView ? headerTop() : headerHeight();
+          const menuTop = headerTop();
 
-          const winHeightOffset = 16;
+          const winHeightOffset = this.currentUser?.redesigned_user_menu_enabled
+            ? 0
+            : 16;
           let initialWinHeight = window.innerHeight;
           const winHeight = initialWinHeight - winHeightOffset;
 
-          let height;
-          if (this.site.mobileView) {
-            height = winHeight - menuTop;
-          }
+          let height = winHeight - menuTop;
 
           const isIPadApp = document.body.classList.contains("footer-nav-ipad"),
             heightProp = isIPadApp ? "max-height" : "height",
@@ -427,10 +476,13 @@ const SiteHeaderComponent = MountWidget.extend(
               headerCloak.style.top = `${menuTop}px`;
             }
           }
-          document.body.classList.remove("drop-down-mode");
         }
 
-        panel.style.setProperty("width", `${width}px`);
+        // TODO: remove the if condition when redesigned_user_menu_enabled is
+        // removed
+        if (!panel.classList.contains("revamped")) {
+          panel.style.setProperty("width", `${width}px`);
+        }
         if (this._animate) {
           this._animateOpening(panel);
         }
@@ -442,22 +494,43 @@ const SiteHeaderComponent = MountWidget.extend(
 
 export default SiteHeaderComponent.extend({
   classNames: ["d-header-wrap"],
+  classNameBindings: ["site.mobileView::drop-down-mode"],
+
+  init() {
+    this._super(...arguments);
+
+    this._resizeObserver = null;
+  },
+
+  didInsertElement() {
+    this._super(...arguments);
+
+    if ("ResizeObserver" in window) {
+      const header = document.querySelector(".d-header-wrap");
+
+      this._resizeObserver = new ResizeObserver((entries) => {
+        for (let entry of entries) {
+          if (entry.contentRect) {
+            document.documentElement.style.setProperty(
+              "--header-offset",
+              entry.contentRect.height + "px"
+            );
+          }
+        }
+      });
+
+      this._resizeObserver.observe(header);
+    }
+  },
+
+  willDestroyElement() {
+    this._super(...arguments);
+
+    this._resizeObserver?.disconnect();
+  },
 });
-
-export function headerHeight() {
-  const header = document.querySelector("header.d-header");
-
-  // Header may not exist in tests (e.g. in the user menu component test).
-  if (!header) {
-    return 0;
-  }
-
-  const headerOffsetTop = header.offsetTop ? header.offsetTop : 0;
-  return header.offsetHeight + headerOffsetTop - document.body.scrollTop;
-}
 
 export function headerTop() {
   const header = document.querySelector("header.d-header");
-  const headerOffsetTop = header.offsetTop ? header.offsetTop : 0;
-  return headerOffsetTop - document.body.scrollTop;
+  return header.offsetTop ? header.offsetTop : 0;
 }

@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe ThemesInstallTask do
+RSpec.describe ThemesInstallTask do
   fab!(:admin) { Fabricate(:admin) }
 
   before do

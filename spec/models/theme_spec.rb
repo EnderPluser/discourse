@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Theme do
+RSpec.describe Theme do
   after do
     Theme.clear_cache!
   end
@@ -224,7 +222,7 @@ HTML
     end
   end
 
-  context "plugin api" do
+  describe "plugin api" do
     def transpile(html)
       f = ThemeField.create!(target_id: Theme.targets[:mobile], theme_id: 1, name: "after_header", value: html)
       f.ensure_baked!
@@ -250,26 +248,12 @@ HTML
       )
       expect(javascript_cache.content).to include("name: \"theme-field-#{field.id}-mobile-html-script-1\",")
       expect(javascript_cache.content).to include("after: \"inject-objects\",")
-      expect(javascript_cache.content).to include("(0, _pluginApi.withPluginApi)(\"0.1\", function (api) {")
-      expect(javascript_cache.content).to include("var x = 1;")
-    end
-
-    it "wraps constants calls in a readOnlyError function" do
-      html = <<HTML
-        <script type='text/discourse-plugin' version='0.1'>
-          const x = 1;
-          x = 2;
-        </script>
-HTML
-
-      baked, javascript_cache = transpile(html)
-      expect(baked).to include(javascript_cache.url)
-      expect(javascript_cache.content).to include('var x = 1;')
-      expect(javascript_cache.content).to include('x = (_readOnlyError("x"), 2);')
+      expect(javascript_cache.content).to include("(0, _pluginApi.withPluginApi)(\"0.1\", api =>")
+      expect(javascript_cache.content).to include("const x = 1;")
     end
   end
 
-  context 'theme upload vars' do
+  describe 'theme upload vars' do
     let :image do
       file_from_fixtures("logo.png")
     end
@@ -284,7 +268,7 @@ HTML
       freeze_time (SiteSetting.clean_orphan_uploads_grace_period_hours + 1).hours.from_now
       Jobs::CleanUpUploads.new.execute(nil)
 
-      expect(Upload.where(id: upload.id)).to be_exist
+      expect(Upload.where(id: upload.id)).to be_exists
 
       # no error for theme field
       theme.reload
@@ -300,7 +284,7 @@ HTML
     end
   end
 
-  context "theme settings" do
+  describe "theme settings" do
     it "allows values to be used in scss" do
       theme.set_field(target: :settings, name: :yaml, value: "background_color: red\nfont_size: 25px")
       theme.set_field(target: :common, name: :scss, value: 'body {background-color: $background_color; font-size: $font-size}')
@@ -326,10 +310,10 @@ HTML
       expect(scss).to include("font-size:30px")
 
       # Escapes correctly. If not, compiling this would throw an exception
-      setting.value = <<~MULTILINE
+      setting.value = <<~CSS
           \#{$fakeinterpolatedvariable}
           andanothervalue 'withquotes'; margin: 0;
-      MULTILINE
+      CSS
 
       theme.set_field(target: :common, name: :scss, value: 'body {font-size: quote($font-size)}')
       theme.save!
@@ -339,6 +323,18 @@ HTML
       ).compile(force: true)
 
       expect(scss).to include('font-size:"#{$fakeinterpolatedvariable}\a andanothervalue \'withquotes\'; margin: 0;\a"')
+    end
+
+    it "can use a setting straight away after introducing it" do
+      theme.set_field(target: :common, name: :scss, value: 'body {background-color: red;}')
+      theme.save!
+
+      theme.reload
+      theme.set_field(target: :settings, name: :yaml, value: "background_color: red\nfont_size: 25px")
+      theme.set_field(target: :common, name: :scss, value: 'body {background-color: $background_color;}')
+      theme.save!
+
+      expect(theme.theme_fields.find_by(target_id: Theme.targets[:common], name: "scss").error).to eq(nil)
     end
 
     it "allows values to be used in JS" do
@@ -359,9 +355,9 @@ HTML
       )
       expect(theme_field.javascript_cache.content).to include("name: \"theme-field-#{theme_field.id}-common-html-script-1\",")
       expect(theme_field.javascript_cache.content).to include("after: \"inject-objects\",")
-      expect(theme_field.javascript_cache.content).to include("(0, _pluginApi.withPluginApi)(\"1.0\", function (api)")
+      expect(theme_field.javascript_cache.content).to include("(0, _pluginApi.withPluginApi)(\"1.0\", api =>")
       expect(theme_field.javascript_cache.content).to include("alert(settings.name)")
-      expect(theme_field.javascript_cache.content).to include("var a = function a() {}")
+      expect(theme_field.javascript_cache.content).to include("let a = () => {}")
 
       setting = theme.settings.find { |s| s.name == :name }
       setting.value = 'bill'
@@ -440,6 +436,10 @@ HTML
   end
 
   def cached_settings(id)
+    Theme.find_by(id: id).cached_settings.to_json
+  end
+
+  def included_settings(id)
     Theme.find_by(id: id).included_settings.to_json
   end
 
@@ -512,7 +512,7 @@ HTML
     theme.save!
 
     Upload.find(upload.id).destroy
-    theme.clear_cached_settings!
+    theme.remove_from_cache!
 
     json = JSON.parse(cached_settings(theme.id))
     expect(json).to be_empty
@@ -547,36 +547,6 @@ HTML
 
     json = JSON.parse(cached_settings(theme.id))
     expect(json["my_upload"]).to eq("http://cdn.localhost#{upload.url}")
-  end
-
-  it 'handles settings cache correctly' do
-    Theme.destroy_all
-
-    expect(cached_settings(theme.id)).to eq("{}")
-
-    theme.set_field(target: :settings, name: "yaml", value: "boolean_setting: true")
-    theme.save!
-    expect(cached_settings(theme.id)).to match(/\"boolean_setting\":true/)
-
-    theme.settings.first.value = "false"
-    theme.save!
-    expect(cached_settings(theme.id)).to match(/\"boolean_setting\":false/)
-
-    child.set_field(target: :settings, name: "yaml", value: "integer_setting: 54")
-
-    child.save!
-    theme.add_relative_theme!(:child, child)
-
-    json = cached_settings(theme.id)
-    expect(json).to match(/\"boolean_setting\":false/)
-    expect(json).to match(/\"integer_setting\":54/)
-
-    expect(cached_settings(child.id)).to eq("{\"integer_setting\":54}")
-
-    child.destroy!
-    json = cached_settings(theme.id)
-    expect(json).not_to match(/\"integer_setting\":54/)
-    expect(json).to match(/\"boolean_setting\":false/)
   end
 
   describe "convert_settings" do
@@ -630,7 +600,7 @@ HTML
     it 'warns when the theme has modified the setting type but data cannot be converted' do
       begin
         @orig_logger = Rails.logger
-        Rails.logger = FakeLogger.new
+        Rails.logger = @fake_logger = FakeLogger.new
 
         theme.set_field(target: :settings, name: :yaml, value: "valid_json_schema_setting:\n  default: \"\"\n  type: \"list\"")
         theme.save!
@@ -644,7 +614,7 @@ HTML
 
         theme.convert_settings
         expect(setting.value).to eq("red,globe")
-        expect(Rails.logger.warnings[0]).to include("Theme setting type has changed but cannot be converted.")
+        expect(@fake_logger.warnings[0]).to include("Theme setting type has changed but cannot be converted.")
       ensure
         Rails.logger = @orig_logger
       end

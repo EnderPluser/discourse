@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe UserSummarySerializer do
+RSpec.describe UserSummarySerializer do
   it "returns expected data" do
     UserActionManager.enable
     user = Fabricate(:user)

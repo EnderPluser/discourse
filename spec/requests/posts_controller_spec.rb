@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-shared_examples 'finding and showing post' do
+RSpec.shared_examples 'finding and showing post' do
   let!(:post) { post_by_user }
 
   it "ensures the user can't see the post" do
@@ -18,7 +16,13 @@ shared_examples 'finding and showing post' do
     expect(response.status).to eq(200)
   end
 
-  context "deleted post" do
+  it "returns 404 when post's topic is deleted" do
+    post.topic.destroy!
+    get url
+    expect(response.status).to eq(404)
+  end
+
+  context "with deleted post" do
     before do
       post.trash!(user)
     end
@@ -46,7 +50,7 @@ shared_examples 'finding and showing post' do
       expect(response.status).to eq(200)
     end
 
-    context "category group moderator" do
+    context "with category group moderator" do
       fab!(:group_user) { Fabricate(:group_user) }
       let(:user_gm) { group_user.user }
       let(:group) { group_user.group }
@@ -70,14 +74,14 @@ shared_examples 'finding and showing post' do
   end
 end
 
-shared_examples 'action requires login' do |method, url, params = {}|
+RSpec.shared_examples 'action requires login' do |method, url, params = {}|
   it 'raises an exception when not logged in' do
     self.public_send(method, url, **params)
     expect(response.status).to eq(403)
   end
 end
 
-describe PostsController do
+RSpec.describe PostsController do
   fab!(:admin) { Fabricate(:admin) }
   fab!(:moderator) { Fabricate(:moderator) }
   fab!(:user) { Fabricate(:user) }
@@ -166,6 +170,28 @@ describe PostsController do
     end
   end
 
+  describe '#reply_ids' do
+    include_examples 'finding and showing post' do
+      let(:url) { "/posts/#{post.id}/reply-ids.json" }
+    end
+
+    it "returns ids of post's replies" do
+      post = Fabricate(:post)
+      reply1 = Fabricate(:post, topic: post.topic, reply_to_post_number: post.post_number)
+      reply2 = Fabricate(:post, topic: post.topic, reply_to_post_number: post.post_number)
+      PostReply.create(post_id: post.id, reply_post_id: reply1.id)
+      PostReply.create(post_id: post.id, reply_post_id: reply2.id)
+
+      get "/posts/#{post.id}/reply-ids.json"
+
+      expect(response.status).to eq(200)
+      expect(response.parsed_body).to eq([
+        { "id" => reply1.id, "level" => 1 },
+        { "id" => reply2.id, "level" => 1 },
+      ])
+    end
+  end
+
   describe '#replies' do
     include_examples 'finding and showing post' do
       let(:url) { "/posts/#{post.id}/replies.json" }
@@ -225,7 +251,7 @@ describe PostsController do
         delete "/posts/#{post.id}.json"
       end
 
-      context "permanently destroy" do
+      context "with permanently destroy" do
         let!(:post) { Fabricate(:post, topic_id: topic.id, post_number: 3) }
 
         before do
@@ -338,7 +364,7 @@ describe PostsController do
         end
       end
 
-      context "deleting flagged posts" do
+      context "when deleting flagged posts" do
         before do
           sign_in(moderator)
           PostActionCreator.off_topic(moderator, post1)
@@ -623,7 +649,7 @@ describe PostsController do
 
   describe "#destroy_bookmark" do
     fab!(:post) { Fabricate(:post) }
-    fab!(:bookmark) { Fabricate(:bookmark, user: user, post: post) }
+    fab!(:bookmark) { Fabricate(:bookmark, user: user, bookmarkable: post) }
 
     before do
       sign_in(user)
@@ -637,7 +663,7 @@ describe PostsController do
 
     context "when the user still has bookmarks in the topic" do
       before do
-        Fabricate(:bookmark, user: user, post: Fabricate(:post, topic: post.topic))
+        Fabricate(:bookmark, user: user, bookmarkable: Fabricate(:post, topic: post.topic))
       end
       it "marks topic_bookmarked as true" do
         delete "/posts/#{post.id}/bookmark.json"
@@ -655,6 +681,14 @@ describe PostsController do
       end
 
       let!(:post) { post_by_user }
+
+      it "returns 400 when wiki parameter is not present" do
+        sign_in(admin)
+
+        put "/posts/#{post.id}/wiki.json", params: {}
+
+        expect(response.status).to eq(400)
+      end
 
       it "raises an error if the user doesn't have permission to wiki the post" do
         put "/posts/#{post.id}/wiki.json", params: { wiki: 'true' }
@@ -706,18 +740,31 @@ describe PostsController do
 
     describe "when logged in" do
       before do
-        sign_in(user)
+        sign_in(moderator)
       end
 
       let!(:post) { post_by_user }
 
       it "raises an error if the user doesn't have permission to change the post type" do
+        sign_in(user)
+
         put "/posts/#{post.id}/post_type.json", params: { post_type: 2 }
         expect(response).to be_forbidden
       end
 
+      it "returns 400 if post_type parameter is not present" do
+        put "/posts/#{post.id}/post_type.json", params: {}
+
+        expect(response.status).to eq(400)
+      end
+
+      it "returns 400 if post_type parameters is invalid" do
+        put "/posts/#{post.id}/post_type.json", params: { post_type: -1 }
+
+        expect(response.status).to eq(400)
+      end
+
       it "can change the post type" do
-        sign_in(moderator)
         put "/posts/#{post.id}/post_type.json", params: { post_type: 2 }
 
         post.reload
@@ -746,11 +793,10 @@ describe PostsController do
 
       it "will invalidate broken images cache" do
         sign_in(moderator)
-        post.custom_fields[Post::BROKEN_IMAGES] = ["https://example.com/image.jpg"]
-        post.save_custom_fields
+        PostHotlinkedMedia.create!(url: "https://example.com/image.jpg", post: post, status: 'download_failed')
         put "/posts/#{post.id}/rebake.json"
         post.reload
-        expect(post.custom_fields[Post::BROKEN_IMAGES]).to be_nil
+        expect(post.post_hotlinked_media).to eq([])
       end
     end
   end
@@ -763,7 +809,7 @@ describe PostsController do
       SiteSetting.enable_whispers = true
     end
 
-    context 'api' do
+    context 'with api' do
       it 'memoizes duplicate requests' do
         raw = "this is a test post 123 #{SecureRandom.hash}"
         title = "this is a title #{SecureRandom.hash}"
@@ -814,6 +860,21 @@ describe PostsController do
         expect(post_1.topic.user.notifications.count).to eq(1)
       end
 
+      it 'allows a topic to be created with an external_id' do
+        master_key = Fabricate(:api_key).key
+        post "/posts.json", params: {
+          raw: 'this is the test content',
+          title: "this is some post",
+          external_id: 'external_id'
+        }, headers: { HTTP_API_USERNAME: user.username, HTTP_API_KEY: master_key }
+
+        expect(response.status).to eq(200)
+
+        new_topic = Topic.last
+
+        expect(new_topic.external_id).to eq('external_id')
+      end
+
       it 'prevents whispers for regular users' do
         post_1 = Fabricate(:post)
         user_key = ApiKey.create!(user: user).key
@@ -823,6 +884,18 @@ describe PostsController do
           headers: { HTTP_API_USERNAME: user.username, HTTP_API_KEY: user_key }
 
         expect(response.status).to eq(403)
+      end
+
+      it 'does not advance draft' do
+        Draft.set(user, Draft::NEW_TOPIC, 0, "test")
+        user_key = ApiKey.create!(user: user).key
+
+        post "/posts.json",
+          params: { title: 'this is a test topic', raw: 'this is test whisper' },
+          headers: { HTTP_API_USERNAME: user.username, HTTP_API_KEY: user_key }
+
+        expect(response.status).to eq(200)
+        expect(Draft.get(user, Draft::NEW_TOPIC, 0)).to eq("test")
       end
 
       it 'will raise an error if specified category cannot be found' do
@@ -853,11 +926,13 @@ describe PostsController do
     end
 
     describe "when logged in" do
+      fab!(:user) { Fabricate(:user) }
+
       before do
         sign_in(user)
       end
 
-      context "fast typing" do
+      context "when fast typing" do
         before do
           SiteSetting.min_first_post_typing_time = 3000
           SiteSetting.auto_silence_fast_typers_max_trust_level = 1
@@ -898,7 +973,7 @@ describe PostsController do
         end
 
         it "doesn't enqueue posts when user first creates a topic" do
-          user.user_stat.update_column(:topic_count, 1)
+          topic = Fabricate(:post, user: user).topic
 
           Draft.set(user, "should_clear", 0, "{'a' : 'b'}")
 
@@ -1283,7 +1358,7 @@ describe PostsController do
         end
       end
 
-      context "errors" do
+      context "with errors" do
         it "does not succeed" do
           post "/posts.json", params: { raw: 'test' }
           expect(response).not_to be_successful
@@ -1303,7 +1378,7 @@ describe PostsController do
           expect(response.parsed_body["errors"]).to include(I18n.t(:spamming_host))
         end
 
-        context "allow_uncategorized_topics is false" do
+        context "when allow_uncategorized_topics is false" do
           before do
             SiteSetting.allow_uncategorized_topics = false
           end
@@ -1448,7 +1523,7 @@ describe PostsController do
       end
     end
 
-    context "topic bump" do
+    context "with topic bump" do
       shared_examples "it works" do
         it "should be able to skip topic bumping" do
           original_bumped_at = 1.day.ago
@@ -1475,7 +1550,7 @@ describe PostsController do
         end
       end
 
-      context "admins" do
+      context "with admins" do
         before do
           sign_in(admin)
         end
@@ -1483,7 +1558,7 @@ describe PostsController do
         include_examples "it works"
       end
 
-      context "moderators" do
+      context "with moderators" do
         before do
           sign_in(moderator)
         end
@@ -1491,7 +1566,7 @@ describe PostsController do
         include_examples "it works"
       end
 
-      context "TL4 users" do
+      context "with TL4 users" do
         fab!(:trust_level_4) { Fabricate(:trust_level_4) }
 
         before do
@@ -1501,7 +1576,7 @@ describe PostsController do
         include_examples "it works"
       end
 
-      context "users" do
+      context "with users" do
         fab!(:topic) { Fabricate(:topic) }
 
         [:user].each do |user|
@@ -1518,7 +1593,7 @@ describe PostsController do
       end
     end
 
-    describe "featured links" do
+    context "with featured links" do
       it "allows to create topics with featured links" do
         sign_in(user_trust_level_1)
 
@@ -1649,7 +1724,7 @@ describe PostsController do
       end
     end
 
-    context "deleted post" do
+    context "with deleted post" do
       fab!(:deleted_post) { Fabricate(:post, user: admin, version: 3) }
       fab!(:deleted_post_revision) { Fabricate(:post_revision, user: admin, post: deleted_post) }
 
@@ -1662,7 +1737,7 @@ describe PostsController do
       end
     end
 
-    context "deleted topic" do
+    context "with deleted topic" do
       fab!(:deleted_topic) { Fabricate(:topic, user: admin) }
       fab!(:post) { Fabricate(:post, user: admin, topic: deleted_topic, version: 3) }
       fab!(:post_revision) { Fabricate(:post_revision, user: admin, post: post) }
@@ -1818,6 +1893,16 @@ describe PostsController do
         expect(response.status).to eq(200)
       end
 
+      it "does not raise if topic has been permanently deleted" do
+        post = Fabricate(:post, user: admin)
+        PostDestroyer.new(admin, post).destroy
+        post.update!(topic_id: -1000)
+
+        sign_in(admin)
+        get "/posts/#{admin.username}/deleted.json"
+        expect(response.status).to eq(200)
+      end
+
       it "doesn't return secured categories for moderators if they don't have access" do
         Fabricate(:moderator)
 
@@ -1877,6 +1962,12 @@ describe PostsController do
       expect(response.status).to eq(200)
       expect(response.body).to eq("123456789")
     end
+
+    it "renders a 404 page" do
+      get "/posts/0/raw"
+      expect(response.status).to eq(404)
+      expect(response.body).to include(I18n.t("page_not_found.title"))
+    end
   end
 
   describe '#markdown_num' do
@@ -1887,6 +1978,16 @@ describe PostsController do
       get "/raw/#{topic.id}/1.json"
       expect(response.status).to eq(200)
       expect(response.body).to eq("123456789")
+    end
+
+    it "can show whole topics" do
+      topic = Fabricate(:topic)
+      post = Fabricate(:post, topic: topic, post_number: 1, raw: "123456789")
+      post_2 = Fabricate(:post, topic: topic, post_number: 2, raw: "abcdefghij")
+      post.save
+      get "/raw/#{topic.id}"
+      expect(response.status).to eq(200)
+      expect(response.body).to include("123456789", "abcdefghij")
     end
   end
 
@@ -1899,10 +2000,23 @@ describe PostsController do
       expect(response).to be_redirect
     end
 
-    it "returns a 403 when access is denied" do
+    it "returns a 403 when access is denied for JSON format" do
       post = Fabricate(:private_message_post)
       get "/p/#{post.id}.json"
       expect(response).to be_forbidden
+    end
+
+    it "returns a 403 when access is denied for HTML format" do
+      post = Fabricate(:private_message_post)
+      get "/p/#{post.id}"
+      expect(response).to be_forbidden
+      expect(response.body).to have_tag("body.no-ember")
+    end
+
+    it "renders a 404 page" do
+      get "/p/0"
+      expect(response.status).to eq(404)
+      expect(response.body).to include(I18n.t("page_not_found.title"))
     end
   end
 
@@ -1958,7 +2072,7 @@ describe PostsController do
   end
 
   describe '#latest' do
-    context 'private posts' do
+    context 'with private posts' do
       describe 'when not logged in' do
         it 'should return the right response' do
           Fabricate(:post)
@@ -2004,7 +2118,7 @@ describe PostsController do
       end
     end
 
-    context 'public posts' do
+    context 'with public posts' do
       it 'returns public posts with topic rss feed' do
         public_post
         private_post
@@ -2015,7 +2129,10 @@ describe PostsController do
 
         body = response.body
 
-        expect(body).to include(public_post.url)
+        # we cache in redis, in rare cases this can cause a flaky test
+        PostsHelper.clear_canonical_cache!(public_post)
+
+        expect(body).to include(public_post.canonical_url)
         expect(body).to_not include(private_post.url)
       end
 

@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe UploadsController do
+RSpec.describe UploadsController do
   fab!(:user) { Fabricate(:user) }
 
   describe '#create' do
@@ -11,7 +9,7 @@ describe UploadsController do
       expect(response.status).to eq(403)
     end
 
-    context 'logged in' do
+    context 'when logged in' do
       before do
         sign_in(user)
       end
@@ -310,8 +308,8 @@ describe UploadsController do
         .to eq(%Q|attachment; filename="#{upload.original_filename}"; filename*=UTF-8''#{upload.original_filename}|)
     end
 
-    context "prevent anons from downloading files" do
-      it "returns 404 when an anonymous user tries to download a file" do
+    context "when user is anonymous" do
+      it "returns 404" do
         upload = upload_file("small.pdf", "pdf")
         delete "/session/#{user.username}.json"
 
@@ -427,7 +425,7 @@ describe UploadsController do
           sign_in(user)
           get upload.short_path
 
-          expected_max_age = S3Helper::DOWNLOAD_URL_EXPIRES_AFTER_SECONDS - UploadsController::SECURE_REDIRECT_GRACE_SECONDS
+          expected_max_age = SiteSetting.s3_presigned_get_url_expires_after_seconds - UploadsController::SECURE_REDIRECT_GRACE_SECONDS
           expect(expected_max_age).to be > 0 # Sanity check that the constants haven't been set to broken values
 
           expect(response.headers["Cache-Control"]).to eq("max-age=#{expected_max_age}, private")
@@ -827,18 +825,34 @@ describe UploadsController do
         expect(response.body).to include(I18n.t("upload.attachments.too_large_humanized", max_size: "1 MB"))
       end
 
+      it 'returns a sensible error if the file size is 0 bytes' do
+        SiteSetting.authorized_extensions = "*"
+        stub_create_multipart_request
+
+        post "/uploads/create-multipart.json", **{
+          params: {
+            file_name: "test.zip",
+            file_size: 0,
+            upload_type: "composer",
+          }
+        }
+
+        expect(response.status).to eq(422)
+        expect(response.body).to include(I18n.t("upload.size_zero_failure"))
+      end
+
       def stub_create_multipart_request
         FileStore::S3Store.any_instance.stubs(:temporary_upload_path).returns(
           "uploads/default/#{test_bucket_prefix}/temp/28fccf8259bbe75b873a2bd2564b778c/test.png"
         )
-        create_multipart_result = <<~BODY
+        create_multipart_result = <<~XML
         <?xml version=\"1.0\" encoding=\"UTF-8\"?>\n
         <InitiateMultipartUploadResult>
            <Bucket>s3-upload-bucket</Bucket>
            <Key>uploads/default/#{test_bucket_prefix}/temp/28fccf8259bbe75b873a2bd2564b778c/test.png</Key>
            <UploadId>#{mock_multipart_upload_id}</UploadId>
         </InitiateMultipartUploadResult>
-        BODY
+        XML
         stub_request(
           :post,
           "https://s3-upload-bucket.s3.us-west-1.amazonaws.com/uploads/default/#{test_bucket_prefix}/temp/28fccf8259bbe75b873a2bd2564b778c/test.png?uploads"
@@ -948,7 +962,7 @@ describe UploadsController do
       end
 
       def stub_list_multipart_request
-        list_multipart_result = <<~BODY
+        list_multipart_result = <<~XML
         <?xml version=\"1.0\" encoding=\"UTF-8\"?>\n
         <ListPartsResult>
            <Bucket>s3-upload-bucket</Bucket>
@@ -974,7 +988,7 @@ describe UploadsController do
            </Owner>
            <StorageClass>STANDARD</StorageClass>
         </ListPartsResult>
-        BODY
+        XML
         stub_request(:get, "https://s3-upload-bucket.s3.us-west-1.amazonaws.com/#{external_upload_stub.key}?max-parts=1&uploadId=#{mock_multipart_upload_id}").to_return({ status: 200, body: list_multipart_result })
       end
 
@@ -1042,23 +1056,22 @@ describe UploadsController do
       it "rate limits" do
         RateLimiter.enable
         RateLimiter.clear_all!
+        SiteSetting.max_batch_presign_multipart_per_minute = 1
 
-        stub_const(ExternalUploadHelpers, "BATCH_PRESIGN_RATE_LIMIT_PER_MINUTE", 1) do
-          stub_list_multipart_request
-          post "/uploads/batch-presign-multipart-parts.json", params: {
-            unique_identifier: external_upload_stub.unique_identifier,
-            part_numbers: [1, 2, 3]
-          }
+        stub_list_multipart_request
+        post "/uploads/batch-presign-multipart-parts.json", params: {
+          unique_identifier: external_upload_stub.unique_identifier,
+          part_numbers: [1, 2, 3]
+        }
 
-          expect(response.status).to eq(200)
+        expect(response.status).to eq(200)
 
-          post "/uploads/batch-presign-multipart-parts.json", params: {
-            unique_identifier: external_upload_stub.unique_identifier,
-            part_numbers: [1, 2, 3]
-          }
+        post "/uploads/batch-presign-multipart-parts.json", params: {
+          unique_identifier: external_upload_stub.unique_identifier,
+          part_numbers: [1, 2, 3]
+        }
 
-          expect(response.status).to eq(429)
-        end
+        expect(response.status).to eq(429)
       end
     end
 
@@ -1092,7 +1105,7 @@ describe UploadsController do
       end
 
       def stub_list_multipart_request
-        list_multipart_result = <<~BODY
+        list_multipart_result = <<~XML
         <?xml version=\"1.0\" encoding=\"UTF-8\"?>\n
         <ListPartsResult>
            <Bucket>s3-upload-bucket</Bucket>
@@ -1118,7 +1131,7 @@ describe UploadsController do
            </Owner>
            <StorageClass>STANDARD</StorageClass>
         </ListPartsResult>
-        BODY
+        XML
         stub_request(:get, "#{upload_base_url}/#{external_upload_stub.key}?max-parts=1&uploadId=#{mock_multipart_upload_id}").to_return({ status: 200, body: list_multipart_result })
       end
 

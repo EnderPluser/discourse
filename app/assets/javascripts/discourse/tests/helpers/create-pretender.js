@@ -1,7 +1,6 @@
 import Pretender from "pretender";
 import User from "discourse/models/user";
 import getURL from "discourse-common/lib/get-url";
-import { Promise } from "rsvp";
 
 export function parsePostData(query) {
   const result = {};
@@ -10,12 +9,16 @@ export function parsePostData(query) {
       const item = part.split("=");
       const firstSeg = decodeURIComponent(item[0]);
       const m = /^([^\[]+)\[(.+)\]/.exec(firstSeg);
-
       const val = decodeURIComponent(item[1]).replace(/\+/g, " ");
+      const isArray = firstSeg.endsWith("[]");
+
       if (m) {
         let key = m[1];
         result[key] = result[key] || {};
         result[key][m[2].replace("][", ".")] = val;
+      } else if (isArray) {
+        result[firstSeg] ||= [];
+        result[firstSeg].push(val);
       } else {
         result[firstSeg] = val;
       }
@@ -133,13 +136,26 @@ export function applyDefaultHandlers(pretender) {
 
   pretender.delete("/bookmarks/:id", () => response({}));
 
-  pretender.get("/tags/filter/search", () => {
-    return response({
+  pretender.get("/tags/filter/search", (request) => {
+    const responseBody = {
       results: [
-        { text: "monkey", count: 1 },
-        { text: "gazelle", count: 2 },
+        { id: "monkey", name: "monkey", count: 1 },
+        { id: "gazelle", name: "gazelle", count: 2 },
       ],
-    });
+    };
+
+    if (
+      request.queryParams.categoryId === "1" &&
+      request.queryParams.q === "" &&
+      !request.queryParams.selected_tags.includes("monkey")
+    ) {
+      responseBody["required_tag_group"] = {
+        name: "monkey group",
+        min_count: 1,
+      };
+    }
+
+    return response(responseBody);
   });
 
   pretender.get(`/u/:username/emails.json`, (request) => {
@@ -254,10 +270,17 @@ export function applyDefaultHandlers(pretender) {
   pretender.get("/search", (request) => {
     if (request.queryParams.q === "discourse") {
       return response(fixturesByUrl["/search.json"]);
-    } else if (request.queryParams.q === "discourse in:personal") {
-      const fixtures = fixturesByUrl["/search.json"];
-      fixtures.topics.firstObject.archetype = "private_message";
-      return response(fixtures);
+    } else if (request.queryParams.q === "discourse visited") {
+      const obj = JSON.parse(JSON.stringify(fixturesByUrl["/search.json"]));
+      obj.topics.firstObject.last_read_post_number = 1;
+      return response(obj);
+    } else if (
+      request.queryParams.q === "discourse in:personal" ||
+      request.queryParams.q === "discourse in:messages"
+    ) {
+      const obj = JSON.parse(JSON.stringify(fixturesByUrl["/search.json"]));
+      obj.topics.firstObject.archetype = "private_message";
+      return response(obj);
     } else {
       return response({});
     }
@@ -287,7 +310,7 @@ export function applyDefaultHandlers(pretender) {
 
   pretender.get("/t/id_for/:slug", () => {
     return response({
-      id: 280,
+      topic_id: 280,
       slug: "internationalization-localization",
       url: "/t/internationalization-localization/280",
     });
@@ -317,18 +340,8 @@ export function applyDefaultHandlers(pretender) {
     });
   });
 
-  // TODO: Remove this old path when no longer using old ember
-  pretender.get("/post_replies", () => {
-    return response({ post_replies: [{ id: 1234, cooked: "wat" }] });
-  });
-
   pretender.get("/posts/:id/replies", () => {
-    return response([{ id: 1234, cooked: "wat" }]);
-  });
-
-  // TODO: Remove this old path when no longer using old ember
-  pretender.get("/post_reply_histories", () => {
-    return response({ post_reply_histories: [{ id: 1234, cooked: "wat" }] });
+    return response([{ id: 1234, cooked: "wat", username: "somebody" }]);
   });
 
   pretender.get("/posts/:id/reply-history", () => {
@@ -352,7 +365,7 @@ export function applyDefaultHandlers(pretender) {
   );
 
   pretender.put("/categories/:category_id", (request) => {
-    const category = parsePostData(request.requestBody);
+    const category = JSON.parse(request.requestBody);
     category.id = parseInt(request.params.category_id, 10);
 
     if (category.email_in === "duplicate@example.com") {
@@ -492,14 +505,11 @@ export function applyDefaultHandlers(pretender) {
 
   pretender.put("/posts/:post_id", async (request) => {
     const data = parsePostData(request.requestBody);
+
     if (data.post.raw === "this will 409") {
       return response(409, { errors: ["edit conflict"] });
-    } else if (data.post.raw === "will return empty json") {
-      window.resolveLastPromise();
-      return new Promise((resolve) => {
-        window.resolveLastPromise = resolve;
-      }).then(() => response(200, {}));
     }
+
     data.post.id = request.params.post_id;
     data.post.version = 2;
     return response(200, data.post);
@@ -510,9 +520,8 @@ export function applyDefaultHandlers(pretender) {
   pretender.get("/t/500.json", () => response(502, {}));
 
   pretender.put("/t/:slug/:id", (request) => {
-    const isJSON = request.requestHeaders["Content-Type"].includes(
-      "application/json"
-    );
+    const isJSON =
+      request.requestHeaders["Content-Type"].includes("application/json");
 
     const data = isJSON
       ? JSON.parse(request.requestBody)
@@ -810,6 +819,7 @@ export function applyDefaultHandlers(pretender) {
   pretender.post("/admin/customize/watched_words.json", (request) => {
     const result = parsePostData(request.requestBody);
     result.id = new Date().getTime();
+    result.case_sensitive = result.case_sensitive === "true";
     return response(200, result);
   });
 
@@ -889,7 +899,7 @@ export function applyDefaultHandlers(pretender) {
       ];
     }
 
-    if (request.queryParams.url.indexOf("/internal-page.html") > -1) {
+    if (request.queryParams.url.includes("/internal-page.html")) {
       return [
         200,
         { "Content-Type": "application/html" },
@@ -1117,6 +1127,12 @@ export function applyDefaultHandlers(pretender) {
       ],
     });
   });
+
+  pretender.get("/tag_groups/filter/search", () =>
+    response(fixturesByUrl["/tag_groups/filter/search"])
+  );
+
+  pretender.get("/c/:id/visible_groups.json", () => response({ groups: [] }));
 }
 
 export function resetPretender() {
@@ -1124,4 +1140,5 @@ export function resetPretender() {
   instance.handledRequests = [];
   instance.unhandledRequests = [];
   instance.passthroughRequests = [];
+  instance.hosts.registries = {};
 }

@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Jobs do
+RSpec.describe Jobs do
 
   describe 'enqueue' do
 
@@ -108,11 +106,11 @@ describe Jobs do
       end
 
       it "executes the job right away" do
-        Jobs::ProcessPost.any_instance.expects(:perform).with(post_id: 1, sync_exec: true, current_site_id: "default")
+        Jobs::ProcessPost.any_instance.expects(:perform).with("post_id" => 1, "sync_exec" => true, "current_site_id" => "default")
         Jobs.enqueue(:process_post, post_id: 1)
       end
 
-      context 'and current_site_id option is given and does not match the current connection' do
+      context 'when current_site_id option is given and does not match the current connection' do
         before do
           Sidekiq::Client.stubs(:enqueue)
           Jobs::ProcessPost.any_instance.stubs(:execute).returns(true)

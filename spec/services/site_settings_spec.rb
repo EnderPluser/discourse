@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe SiteSettingsTask do
+RSpec.describe SiteSettingsTask do
 
   before do
     Discourse::Application.load_tasks

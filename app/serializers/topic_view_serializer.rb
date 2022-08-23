@@ -41,7 +41,8 @@ class TopicViewSerializer < ApplicationSerializer
     :pinned_at,
     :pinned_until,
     :image_url,
-    :slow_mode_seconds
+    :slow_mode_seconds,
+    :external_id
   )
 
   attributes(
@@ -102,6 +103,10 @@ class TopicViewSerializer < ApplicationSerializer
 
   def include_is_warning?
     is_warning
+  end
+
+  def include_external_id?
+    external_id
   end
 
   def draft
@@ -198,6 +203,14 @@ class TopicViewSerializer < ApplicationSerializer
   end
 
   def topic_timer
+    topic_timer = object.topic.public_topic_timer
+
+    return nil if topic_timer.blank?
+
+    if topic_timer.publishing_to_category?
+      return nil if !scope.can_see_category?(Category.find_by(id: topic_timer.category_id))
+    end
+
     TopicTimerSerializer.new(object.topic.public_topic_timer, root: false)
   end
 

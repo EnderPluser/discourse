@@ -57,9 +57,12 @@ addBulkButton("showNotificationLevel", "notification_level", {
   icon: "d-regular",
   class: "btn-default",
 });
-addBulkButton("resetRead", "reset_read", {
-  icon: "backward",
+addBulkButton("deletePostTiming", "defer", {
+  icon: "circle",
   class: "btn-default",
+  buttonVisible() {
+    return this.currentUser.enable_defer;
+  },
 });
 addBulkButton("unlistTopics", "unlist_topics", {
   icon: "far-eye-slash",
@@ -72,6 +75,13 @@ addBulkButton("relistTopics", "relist_topics", {
   class: "btn-default",
   buttonVisible: (topics) =>
     topics.some((t) => !t.visible) && !topics.some((t) => t.isPrivateMessage),
+});
+addBulkButton("resetBumpDateTopics", "reset_bump_dates", {
+  icon: "anchor",
+  class: "btn-default",
+  buttonVisible() {
+    return this.currentUser.canManageTopic;
+  },
 });
 addBulkButton("showTagTopics", "change_tags", {
   icon: "tag",
@@ -287,6 +297,10 @@ export default Controller.extend(ModalFunctionality, {
       this.forEachPerformed({ type: "relist" }, (t) => t.set("visible", true));
     },
 
+    resetBumpDateTopics() {
+      this.performAndRefresh({ type: "reset_bump_dates" });
+    },
+
     changeCategory() {
       const categoryId = parseInt(this.newCategoryId, 10) || 0;
 
@@ -299,8 +313,8 @@ export default Controller.extend(ModalFunctionality, {
       );
     },
 
-    resetRead() {
-      this.performAndRefresh({ type: "reset_read" });
+    deletePostTiming() {
+      this.performAndRefresh({ type: "destroy_post_timing" });
     },
 
     removeTags() {

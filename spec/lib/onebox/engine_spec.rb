@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe Onebox::Engine do
+RSpec.describe Onebox::Engine do
   class OneboxEngineExample
     include Onebox::Engine
 
@@ -50,6 +48,18 @@ describe Onebox::Engine do
     end
   end
 
+  describe "origins_to_regexes" do
+    it "converts URLs to regexes" do
+      result = Onebox::Engine.origins_to_regexes(["https://example.com", "https://example2.com"])
+      expect(result).to eq([/\Ahttps:\/\/example\.com/i, /\Ahttps:\/\/example2\.com/i])
+    end
+
+    it "treats '*' as a catch-all" do
+      result = Onebox::Engine.origins_to_regexes(["https://example.com", "*", "https://example2.com"])
+      expect(result).to eq([/.*/])
+    end
+  end
+
   describe "handles_content_type?" do
     class OneboxEngineImages
       include Onebox::Engine
@@ -76,22 +86,22 @@ describe Onebox::Engine do
       expect(result).to match(/https/)
     end
   end
-end
 
-describe ".onebox_name" do
-  module ScopeForTemplateName
-    class TemplateNameOnebox
-      include Onebox::Engine
+  describe ".onebox_name" do
+    module ScopeForTemplateName
+      class TemplateNameOnebox
+        include Onebox::Engine
+      end
     end
-  end
 
-  let(:onebox_name) { ScopeForTemplateName::TemplateNameOnebox.onebox_name }
+    let(:onebox_name) { ScopeForTemplateName::TemplateNameOnebox.onebox_name }
 
-  it "should not include the scope" do
-    expect(onebox_name).not_to include("ScopeForTemplateName", "scopefortemplatename")
-  end
+    it "should not include the scope" do
+      expect(onebox_name).not_to include("ScopeForTemplateName", "scopefortemplatename")
+    end
 
-  it "should not include the word Onebox" do
-    expect(onebox_name).not_to include("onebox", "Onebox")
+    it "should not include the word Onebox" do
+      expect(onebox_name).not_to include("onebox", "Onebox")
+    end
   end
 end

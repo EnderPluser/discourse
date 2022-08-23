@@ -1,11 +1,10 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe UserMerger do
+RSpec.describe UserMerger do
   fab!(:target_user) { Fabricate(:user, username: 'alice', email: 'alice@example.com') }
   fab!(:source_user) { Fabricate(:user, username: 'alice1', email: 'alice@work.com') }
   fab!(:walter) { Fabricate(:walter_white) }
+  fab!(:coding_horror) { Fabricate(:coding_horror) }
 
   fab!(:p1) { Fabricate(:post) }
   fab!(:p2) { Fabricate(:post) }
@@ -97,7 +96,7 @@ describe UserMerger do
     expect(category_ids).to be_empty
   end
 
-  context "developer flag" do
+  context "with developer flag" do
     it "moves the developer flag when the target user isn't a developer yet" do
       Developer.create!(user_id: source_user.id)
       merge_users!
@@ -116,7 +115,7 @@ describe UserMerger do
     end
   end
 
-  context "drafts" do
+  context "with drafts" do
     def create_draft(user, key, text)
       seq = DraftSequence.next!(user, key)
       Draft.set(user, key, seq, text)
@@ -155,7 +154,7 @@ describe UserMerger do
     expect(EmailLog.where(user_id: target_user.id).count).to eq(1)
   end
 
-  context "likes" do
+  context "with likes" do
     def given_daily_like_count_for(user, date)
       GivenDailyLike.find_for(user.id, date).pluck(:likes_given)[0] || 0
     end
@@ -271,7 +270,6 @@ describe UserMerger do
     muted1 = Fabricate(:user)
     muted2 = Fabricate(:user)
     muted3 = Fabricate(:user)
-    coding_horror = Fabricate(:coding_horror)
 
     MutedUser.create!(user_id: source_user.id, muted_user_id: muted1.id)
     MutedUser.create!(user_id: source_user.id, muted_user_id: muted2.id)
@@ -297,7 +295,6 @@ describe UserMerger do
     ignored1 = Fabricate(:user)
     ignored2 = Fabricate(:user)
     ignored3 = Fabricate(:user)
-    coding_horror = Fabricate(:coding_horror)
 
     Fabricate(:ignored_user, user: source_user, ignored_user: ignored1)
     Fabricate(:ignored_user, user: source_user, ignored_user: ignored2)
@@ -319,7 +316,7 @@ describe UserMerger do
     expect(IgnoredUser.where(ignored_user_id: source_user.id).count).to eq(0)
   end
 
-  context "notifications" do
+  context "with notifications" do
     it "updates notifications" do
       Fabricate(:notification, user: source_user)
       Fabricate(:notification, user: source_user)
@@ -332,7 +329,7 @@ describe UserMerger do
     end
   end
 
-  context "post actions" do
+  context "with post actions" do
     it "merges post actions" do
       type_ids = PostActionType.public_type_ids + [PostActionType.flag_types.values.first]
 
@@ -383,7 +380,7 @@ describe UserMerger do
     expect(post_revision.reload.user).to eq(target_user)
   end
 
-  context "post timings" do
+  context "with post timings" do
     def create_post_timing(post, user, msecs)
       PostTiming.create!(
         topic_id: post.topic_id,
@@ -405,23 +402,27 @@ describe UserMerger do
       post1 = p1
       post2 = p2
       post3 = p3
+      post4 = p4
 
       create_post_timing(post1, source_user, 12345)
       create_post_timing(post2, source_user, 9876)
+      create_post_timing(post4, source_user, 2**31 - 100)
       create_post_timing(post2, target_user, 3333)
       create_post_timing(post3, target_user, 10000)
+      create_post_timing(post4, target_user, 5000)
 
       merge_users!
 
       expect(post_timing_msecs_for(post1, target_user)).to eq(12345)
       expect(post_timing_msecs_for(post2, target_user)).to eq(13209)
       expect(post_timing_msecs_for(post3, target_user)).to eq(10000)
+      expect(post_timing_msecs_for(post4, target_user)).to eq(2**31 - 1)
 
       expect(PostTiming.where(user_id: source_user.id).count).to eq(0)
     end
   end
 
-  context "posts" do
+  context "with posts" do
     it "updates user ids of posts" do
       source_user.update_attribute(:moderator, true)
 
@@ -561,7 +562,7 @@ describe UserMerger do
     expect(TopicLinkClick.where(user_id: walter.id).count).to eq(1)
   end
 
-  context "topic timers" do
+  context "with topic timers" do
     def create_topic_timer(topic, user, status_type, deleted_by = nil)
       timer = Fabricate(:topic_timer, topic: topic, user: user, status_type: TopicTimer.types[status_type])
       timer.trash!(deleted_by) if deleted_by
@@ -645,9 +646,9 @@ describe UserMerger do
   end
 
   it "updates unsubscribe keys" do
-    UnsubscribeKey.create_key_for(source_user, "digest")
-    UnsubscribeKey.create_key_for(target_user, "digest")
-    UnsubscribeKey.create_key_for(walter, "digest")
+    UnsubscribeKey.create_key_for(source_user, UnsubscribeKey::DIGEST_TYPE)
+    UnsubscribeKey.create_key_for(target_user, UnsubscribeKey::DIGEST_TYPE)
+    UnsubscribeKey.create_key_for(walter, UnsubscribeKey::DIGEST_TYPE)
 
     merge_users!
 
@@ -666,7 +667,7 @@ describe UserMerger do
     expect(Upload.where(user_id: source_user.id).count).to eq(0)
   end
 
-  context "user actions" do
+  context "with user actions" do
     # action_type and user_id are not nullable
     # target_topic_id and acting_user_id are nullable, but always have a value
 
@@ -705,8 +706,6 @@ describe UserMerger do
     end
 
     it "merges when acting_user is neither source_user nor target_user" do
-      coding_horror = Fabricate(:coding_horror)
-
       pm_topic1 = Fabricate(:private_message_topic, topic_allowed_users: [
         Fabricate.build(:topic_allowed_user, user: walter),
         Fabricate.build(:topic_allowed_user, user: source_user),
@@ -765,7 +764,7 @@ describe UserMerger do
     expect(UserArchivedMessage.where(user_id: source_user.id).count).to eq(0)
   end
 
-  context "badges" do
+  context "with badges" do
     def create_badge(badge, user, opts = {})
       UserBadge.create!(
         badge: badge,
@@ -930,7 +929,7 @@ describe UserMerger do
     expect(events).to include(event_name: :merging_users, params: [source_user, target_user])
   end
 
-  context "site settings" do
+  context "with site settings" do
     it "updates usernames in site settings" do
       SiteSetting.site_contact_username = source_user.username
       SiteSetting.embed_by_username = source_user.username
@@ -1002,13 +1001,11 @@ describe UserMerger do
 
   it "deletes external auth infos of source user" do
     UserAssociatedAccount.create(user_id: source_user.id, provider_name: "facebook", provider_uid: "1234")
-    Oauth2UserInfo.create(user_id: source_user.id, uid: "example", provider: "example")
     SingleSignOnRecord.create(user_id: source_user.id, external_id: "example", last_payload: "looks good")
 
     merge_users!
 
     expect(UserAssociatedAccount.where(user_id: source_user.id).count).to eq(0)
-    expect(Oauth2UserInfo.where(user_id: source_user.id).count).to eq(0)
     expect(SingleSignOnRecord.where(user_id: source_user.id).count).to eq(0)
   end
 

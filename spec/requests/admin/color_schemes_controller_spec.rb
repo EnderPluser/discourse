@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Admin::ColorSchemesController do
+RSpec.describe Admin::ColorSchemesController do
   it "is a subclass of AdminController" do
     expect(described_class < Admin::AdminController).to eq(true)
   end

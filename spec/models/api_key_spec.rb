@@ -1,9 +1,7 @@
 # encoding: utf-8
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe ApiKey do
+RSpec.describe ApiKey do
   fab!(:user) { Fabricate(:user) }
 
   it { is_expected.to belong_to :user }

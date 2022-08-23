@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe HashtagsController do
+RSpec.describe HashtagsController do
   fab!(:category) { Fabricate(:category) }
   fab!(:tag) { Fabricate(:tag) }
 

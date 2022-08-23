@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe TrustLevelAndStaffSetting do
+RSpec.describe TrustLevelAndStaffSetting do
   describe ".values" do
     after do
       I18n.reload!

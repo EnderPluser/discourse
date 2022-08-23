@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe GroupsController do
+RSpec.describe GroupsController do
   fab!(:user) { Fabricate(:user) }
+  fab!(:user2) { Fabricate(:user) }
   fab!(:other_user) { Fabricate(:user) }
   let(:group) { Fabricate(:group, users: [user]) }
   let(:moderator_group_id) { Group::AUTO_GROUPS[:moderators] }
@@ -71,7 +70,7 @@ describe GroupsController do
       end
     end
 
-    context 'searchable' do
+    context 'with searchable' do
       it 'should return the searched groups' do
         testing_group = Fabricate(:group, name: 'testing')
 
@@ -86,13 +85,13 @@ describe GroupsController do
       end
     end
 
-    context 'sortable' do
+    context 'with sortable' do
       before do
         group
         sign_in(user)
       end
 
-      fab!(:other_group) { Fabricate(:group, name: "other_group", users: [user, other_user]) }
+      fab!(:group_with_2_users) { Fabricate(:group, name: "other_group", users: [user, other_user]) }
 
       context "with default (descending) order" do
         it "sorts by name" do
@@ -103,7 +102,7 @@ describe GroupsController do
           body = response.parsed_body
 
           expect(body["groups"].map { |g| g["id"] }).to eq([
-            other_group.id, group.id, moderator_group_id
+            group_with_2_users.id, group.id, moderator_group_id
           ])
 
           expect(body["load_more_groups"]).to eq("/groups?order=name&page=1")
@@ -117,7 +116,7 @@ describe GroupsController do
           body = response.parsed_body
 
           expect(body["groups"].map { |g| g["id"] }).to eq([
-            other_group.id, group.id, moderator_group_id
+            group_with_2_users.id, moderator_group_id, group.id
           ])
 
           expect(body["load_more_groups"]).to eq("/groups?order=user_count&page=1")
@@ -133,7 +132,7 @@ describe GroupsController do
           body = response.parsed_body
 
           expect(body["groups"].map { |g| g["id"] }).to eq([
-            moderator_group_id, group.id, other_group.id
+            moderator_group_id, group.id, group_with_2_users.id
           ])
 
           expect(body["load_more_groups"]).to eq("/groups?asc=true&order=name&page=1")
@@ -147,7 +146,7 @@ describe GroupsController do
           body = response.parsed_body
 
           expect(body["groups"].map { |g| g["id"] }).to eq([
-            moderator_group_id, group.id, other_group.id
+            moderator_group_id, group.id, group_with_2_users.id
           ])
 
           expect(body["load_more_groups"]).to eq("/groups?asc=true&order=user_count&page=1")
@@ -176,7 +175,7 @@ describe GroupsController do
       )
     end
 
-    context 'viewing groups of another user' do
+    context 'when viewing groups of another user' do
       describe 'when an invalid username is given' do
         it 'should return the right response' do
           group
@@ -255,7 +254,7 @@ describe GroupsController do
       end
     end
 
-    context 'viewing as an admin' do
+    context 'when viewing as an admin' do
       before do
         sign_in(admin)
         group.add(admin)
@@ -284,7 +283,7 @@ describe GroupsController do
         )
       end
 
-      context 'filterable by type' do
+      context 'when filterable by type' do
         def expect_type_to_return_right_groups(type, expected_group_ids)
           get "/groups.json", params: { type: type }
 
@@ -298,18 +297,18 @@ describe GroupsController do
         end
 
         describe 'my groups' do
-          it 'should return the right response' do
-            expect_type_to_return_right_groups('my', [group.id])
+          it 'should return the groups admin is a member of' do
+            expect_type_to_return_right_groups('my', admin.group_users.map(&:group_id))
           end
         end
 
         describe 'owner groups' do
-          it 'should return the right response' do
+          it 'should return the groups admin is a owner of' do
             group2 = Fabricate(:group)
             _group3 = Fabricate(:group)
             group2.add_owner(admin)
 
-            expect_type_to_return_right_groups('owner', [group.id, group2.id])
+            expect_type_to_return_right_groups('owner', admin.group_users.where(owner: true).map(&:group_id))
           end
         end
 
@@ -546,6 +545,23 @@ describe GroupsController do
 
       expect(members.last['added_at']).to eq(first_user.created_at.as_json)
     end
+
+    it "can sort items" do
+      sign_in(user)
+      group.update!(visibility_level: Group.visibility_levels[:logged_on_users])
+      other_user = Fabricate(:user)
+      group.add_owner(other_user)
+
+      get "/groups/#{group.name}/members.json"
+
+      expect(response.parsed_body["members"].map { |u| u["id"] }).to eq([other_user.id, user.id])
+      expect(response.parsed_body["owners"].map { |u| u["id"] }).to eq([other_user.id])
+
+      get "/groups/#{group.name}/members.json?order=added_at&asc=1"
+
+      expect(response.parsed_body["members"].map { |u| u["id"] }).to eq([user.id, other_user.id])
+      expect(response.parsed_body["owners"].map { |u| u["id"] }).to eq([other_user.id])
+    end
   end
 
   describe '#posts_feed' do
@@ -656,7 +672,7 @@ describe GroupsController do
     let(:category) { Fabricate(:category) }
     let(:tag) { Fabricate(:tag) }
 
-    context "custom_fields" do
+    context "with custom_fields" do
       before do
         user.update!(admin: true)
         sign_in(user)
@@ -778,8 +794,7 @@ describe GroupsController do
 
     context "when user is group admin" do
       before do
-        user.update!(admin: true)
-        sign_in(user)
+        sign_in(admin)
       end
 
       it 'should be able to update the group' do
@@ -823,7 +838,7 @@ describe GroupsController do
           .to eq(group.id)
       end
 
-      it "should be able to update an automatic group" do
+      it "they should be able to update an automatic group" do
         group = Group.find(Group::AUTO_GROUPS[:admins])
 
         group.update!(
@@ -845,7 +860,8 @@ describe GroupsController do
             default_notification_level: 1,
             tracking_category_ids: [category.id],
             tracking_tags: [tag.name]
-          }
+          },
+          update_existing_users: false
         }
 
         expect(response.status).to eq(200)
@@ -873,11 +889,10 @@ describe GroupsController do
         expect(event[:params].first).to eq(group)
       end
 
-      context "user default notifications" do
+      context "with user default notifications" do
         it "should update default notification preference for existing users" do
           group.update!(default_notification_level: NotificationLevels.all[:watching])
           user1 = Fabricate(:user)
-          user2 = Fabricate(:user)
           group.add(user1)
           group.add(user2)
           group_user1 = user1.group_users.first
@@ -889,13 +904,11 @@ describe GroupsController do
             }
           }
 
-          expect(response.status).to eq(200)
-
+          expect(response.status).to eq(422)
+          expect(response.parsed_body["user_count"]).to eq(group.group_users.count)
+          expect(response.parsed_body["errors"].first).to include("update_existing_users")
           expect(group_user1.reload.notification_level).to eq(NotificationLevels.all[:watching])
           expect(group_user2.reload.notification_level).to eq(NotificationLevels.all[:watching])
-
-          group_users = group.group_users
-          expect(response.parsed_body["user_count"]).to eq(group_users.count)
 
           group_user1.update!(notification_level: NotificationLevels.all[:regular])
 
@@ -905,7 +918,7 @@ describe GroupsController do
             }
           }
 
-          expect(response.status).to eq(200)
+          expect(response.status).to eq(422)
           expect(response.parsed_body["user_count"]).to eq(group.group_users.count - 1)
           expect(group_user1.reload.notification_level).to eq(NotificationLevels.all[:regular])
           expect(group_user2.reload.notification_level).to eq(NotificationLevels.all[:watching])
@@ -937,7 +950,6 @@ describe GroupsController do
 
         it "should update category & tag notification preferences for existing users" do
           user1 = Fabricate(:user)
-          user2 = Fabricate(:user)
           CategoryUser.create!(user: user1, category: category, notification_level: 4)
           TagUser.create!(user: user1, tag: tag, notification_level: 4)
           TagUser.create!(user: user2, tag: tag, notification_level: 4)
@@ -959,7 +971,7 @@ describe GroupsController do
             }
           }
 
-          expect(response.status).to eq(200)
+          expect(response.status).to eq(422)
           expect(response.parsed_body["user_count"]).to eq(group.group_users.count - 1)
 
           put "/groups/#{group.id}.json", params: {
@@ -1263,7 +1275,7 @@ describe GroupsController do
         expect(response).to be_forbidden
       end
 
-      context 'public group' do
+      context 'with public group' do
         it 'should be forbidden' do
           group.update!(
             public_admission: true,
@@ -1311,14 +1323,12 @@ describe GroupsController do
   end
 
   describe "membership edits" do
-    context '#add_members' do
+    describe '#add_members' do
       before do
         sign_in(admin)
       end
 
       it "can make incremental adds" do
-        user2 = Fabricate(:user)
-
         expect do
           put "/groups/#{group.id}/members.json", params: { usernames: user2.username }
         end.to change { group.users.count }.by(1)
@@ -1340,18 +1350,14 @@ describe GroupsController do
       end
 
       it "does not notify users when the param is not present" do
-        user2 = Fabricate(:user)
-
         expect {
           put "/groups/#{group.id}/members.json", params: { usernames: user2.username }
-        }.to change { Topic.where(archetype: "private_message").count }.by(0)
+        }.not_to change { Topic.where(archetype: "private_message").count }
 
         expect(response.status).to eq(200)
       end
 
       it "notifies users when the param is present" do
-        user2 = Fabricate(:user)
-
         expect {
           put "/groups/#{group.id}/members.json", params: { usernames: user2.username, notify_users: true }
         }.to change { Topic.where(archetype: "private_message").count }.by(1)
@@ -1377,7 +1383,7 @@ describe GroupsController do
         expect(response.status).to eq(403)
       end
 
-      context "is able to add several members to a group" do
+      context "when is able to add several members to a group" do
         fab!(:user1) { Fabricate(:user) }
         fab!(:user2) { Fabricate(:user, username: "UsEr2") }
 
@@ -1447,7 +1453,7 @@ describe GroupsController do
           expect do
             put "/groups/#{group.id}/members.json",
               params: { user_emails: [user1.email, user2.email, user3.email].join(",") }
-          end.to change { group.users.count }.by(0)
+          end.not_to change { group.users.count }
 
           expect(response.status).to eq(422)
 
@@ -1463,7 +1469,7 @@ describe GroupsController do
             expect do
               put "/groups/#{group.id}/members.json",
                 params: { user_emails: [user1.email, user2.email].join(",") }
-            end.to change { group.reload.users.count }.by(0)
+            end.not_to change { group.reload.users.count }
 
             expect(response.status).to eq(422)
 
@@ -1558,7 +1564,7 @@ describe GroupsController do
         expect(new_user.reload.group_ids.include?(group.id)).to eq(true)
       end
 
-      context 'public group' do
+      context 'with public group' do
         before do
           group.update!(
             public_admission: true,
@@ -1566,7 +1572,7 @@ describe GroupsController do
           )
         end
 
-        context 'admin' do
+        context 'when admin' do
           it "can make incremental adds" do
             expect do
               put "/groups/#{group.id}/members.json",
@@ -1585,7 +1591,7 @@ describe GroupsController do
       end
     end
 
-    context '#join' do
+    describe '#join' do
       let(:public_group) { Fabricate(:public_group) }
 
       it 'should allow a user to join a public group' do
@@ -1636,7 +1642,7 @@ describe GroupsController do
       end
     end
 
-    context '#remove_member' do
+    describe '#remove_member' do
       before do
         sign_in(admin)
       end
@@ -1662,7 +1668,7 @@ describe GroupsController do
         expect(response_body["skipped_usernames"].first).to eq("system")
       end
 
-      context "is able to remove a member" do
+      context "when is able to remove a member" do
         it "removes by id" do
           expect do
             delete "/groups/#{group.id}/members.json", params: { user_id: user.id }
@@ -1705,10 +1711,10 @@ describe GroupsController do
           expect(response.status).to eq(200)
         end
 
-        context 'public group' do
+        context 'with public group' do
           let(:group) { Fabricate(:public_group, users: [other_user]) }
 
-          context "admin" do
+          context "when admin" do
             it "removes by username" do
               expect do
                 delete "/groups/#{group.id}/members.json",
@@ -1730,8 +1736,8 @@ describe GroupsController do
         end
       end
 
-      context '#remove_members' do
-        context "is able to remove several members from a group" do
+      describe '#remove_members' do
+        context "when is able to remove several members from a group" do
           fab!(:user1) { Fabricate(:user) }
           fab!(:user2) { Fabricate(:user, username: "UsEr2") }
           let(:group1) { Fabricate(:group, users: [user1, user2]) }
@@ -1784,7 +1790,7 @@ describe GroupsController do
       end
     end
 
-    context '#leave' do
+    describe '#leave' do
       let(:group_with_public_exit) { Fabricate(:group, public_exit: true, users: [user]) }
 
       it 'should allow a user to leave a group with public exit' do
@@ -2234,7 +2240,7 @@ describe GroupsController do
       group.group_users.where(user: user).last.update(owner: user)
     end
 
-    context "validating smtp" do
+    context "when validating smtp" do
       let(:protocol) { "smtp" }
       let(:username) { "test@gmail.com" }
       let(:password) { "password" }
@@ -2255,7 +2261,7 @@ describe GroupsController do
       end
     end
 
-    context "validating imap" do
+    context "when validating imap" do
       let(:protocol) { "imap" }
       let(:username) { "test@gmail.com" }
       let(:password) { "password" }
@@ -2303,7 +2309,7 @@ describe GroupsController do
         end
       end
 
-      context "user does not have access to the group" do
+      context "when user does not have access to the group" do
         before do
           group.group_users.destroy_all
         end
@@ -2314,7 +2320,7 @@ describe GroupsController do
         end
       end
 
-      context "rate limited" do
+      context "when rate limited" do
         it "rate limits anon searches per user" do
           RateLimiter.enable
           RateLimiter.clear_all!

@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe CategoryUploadSerializer do
+RSpec.describe CategoryUploadSerializer do
 
   fab!(:upload) { Fabricate(:upload) }
   let(:subject) { described_class.new(upload, root: false) }

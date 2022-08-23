@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe TopicList do
+RSpec.describe TopicList do
   let!(:topic) {
     t = Fabricate(:topic)
     t.allowed_user_ids = [t.user.id]
@@ -30,7 +28,7 @@ describe TopicList do
     end
   end
 
-  context "preload" do
+  describe "preload" do
     it "allows preloading of data" do
       preloaded_topic = false
       preloader = lambda do |topics, topic_list|
@@ -50,7 +48,11 @@ describe TopicList do
 
   describe '#load_topics' do
     it 'loads additional data for serialization' do
-      category_user = CategoryUser.create!(user: user, category: topic.category)
+      category_user = CategoryUser.create!(
+        user: user,
+        category: topic.category,
+        notification_level: NotificationLevels.all[:regular]
+      )
 
       topic = topic_list.load_topics.first
 

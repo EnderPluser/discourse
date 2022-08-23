@@ -1,10 +1,7 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe TopicConverter do
-
-  context 'convert_to_public_topic' do
+RSpec.describe TopicConverter do
+  describe 'convert_to_public_topic' do
     fab!(:admin) { Fabricate(:admin) }
     fab!(:author) { Fabricate(:user) }
     fab!(:category) { Fabricate(:category, topic_count: 1) }
@@ -16,22 +13,37 @@ describe TopicConverter do
       Category.find(SiteSetting.uncategorized_category_id)
     end
 
-    context 'success' do
+    context 'with success' do
       it "converts private message to regular topic" do
         SiteSetting.allow_uncategorized_topics = true
         topic = nil
+
+        _pm_post_2 = Fabricate(:post, topic: private_message, user: author)
+        _pm_post_3 = Fabricate(:post, topic: private_message, user: author)
+
+        other_pm = Fabricate(:private_message_post).topic
+        other_pm_post = Fabricate(:private_message_post, topic: other_pm)
+        other_pm_post_2 = Fabricate(:private_message_post, topic: other_pm, user: other_pm_post.user)
 
         expect do
           topic = TopicConverter.new(first_post.topic, admin).convert_to_public_topic
           topic.reload
         end.to change { uncategorized_category.reload.topic_count }.by(1)
+          .and change { author.reload.topic_count }.from(0).to(1)
+          .and change { author.reload.post_count }.from(0).to(2)
+
+        # Ensure query does not affect users from other topics or posts as DB query to update count is quite complex.
+        expect(other_pm.user.topic_count).to eq(0)
+        expect(other_pm.user.post_count).to eq(0)
+        expect(other_pm_post.user.topic_count).to eq(0)
+        expect(other_pm_post.user.post_count).to eq(0)
 
         expect(topic).to be_valid
         expect(topic.archetype).to eq("regular")
         expect(topic.category_id).to eq(SiteSetting.uncategorized_category_id)
       end
 
-      describe 'when uncategorized category is not allowed' do
+      context 'when uncategorized category is not allowed' do
         before do
           SiteSetting.allow_uncategorized_topics = false
           category.update!(read_restricted: false)
@@ -52,7 +64,7 @@ describe TopicConverter do
         end
       end
 
-      describe 'when a custom category_id is given' do
+      context 'when a custom category_id is given' do
         it 'should convert private message into the right category' do
           topic = TopicConverter.new(first_post.topic, admin).convert_to_public_topic(category.id)
 
@@ -68,7 +80,7 @@ describe TopicConverter do
         expect(private_message.user.user_stat.post_count).to eq(0)
         private_message.convert_to_public_topic(admin)
         expect(private_message.reload.user.user_stat.topic_count).to eq(1)
-        expect(private_message.user.user_stat.post_count).to eq(1)
+        expect(private_message.user.user_stat.post_count).to eq(0)
         expect(topic_user.reload.notification_level).to eq(TopicUser.notification_levels[:watching])
       end
 
@@ -105,14 +117,14 @@ describe TopicConverter do
     end
   end
 
-  context 'convert_to_private_message' do
+  describe 'convert_to_private_message' do
     fab!(:admin) { Fabricate(:admin) }
     fab!(:author) { Fabricate(:user) }
     fab!(:category) { Fabricate(:category) }
     fab!(:topic) { Fabricate(:topic, user: author, category_id: category.id) }
-    fab!(:post) { Fabricate(:post, topic: topic) }
+    fab!(:post) { Fabricate(:post, topic: topic, user: topic.user) }
 
-    context 'success' do
+    context 'with success' do
       it "converts regular topic to private message" do
         private_message = topic.convert_to_private_message(post.user)
         expect(private_message).to be_valid
@@ -121,16 +133,39 @@ describe TopicConverter do
         expect(category.reload.topic_count).to eq(0)
       end
 
-      it "updates user stats" do
-        Fabricate(:post, topic: topic, user: author)
+      it "converts unlisted topic to private message" do
+        topic.update_status('visible', false, admin)
+        private_message = topic.convert_to_private_message(post.user)
+
+        expect(private_message).to be_valid
+        expect(topic.archetype).to eq("private_message")
+        expect(topic.category_id).to eq(nil)
+        expect(topic.user.post_count).to eq(0)
+        expect(topic.user.topic_count).to eq(0)
+        expect(category.reload.topic_count).to eq(0)
+      end
+
+      it "updates user stats when converting topic to private message" do
+        _post_2 = Fabricate(:post, topic: topic, user: author)
+        _post_3 = Fabricate(:post, topic: topic, user: author)
+
+        other_topic = Fabricate(:post).topic
+        other_post = Fabricate(:post, topic: other_topic)
+
         topic_user = TopicUser.create!(user_id: author.id, topic_id: topic.id, posted: true)
-        author.user_stat.topic_count = 1
-        author.user_stat.save
-        expect(topic.user.user_stat.topic_count).to eq(1)
-        topic.convert_to_private_message(admin)
+
+        expect do
+          topic.convert_to_private_message(admin)
+        end.to change { author.reload.post_count }.from(2).to(0)
+          .and change { author.reload.topic_count }.from(1).to(0)
+
+        # Ensure query does not affect users from other topics or posts as DB query to update count is quite complex.
+        expect(other_topic.user.post_count).to eq(0)
+        expect(other_topic.user.topic_count).to eq(1)
+        expect(other_post.user.post_count).to eq(1)
+        expect(other_post.user.topic_count).to eq(0)
 
         expect(topic.reload.topic_allowed_users.where(user_id: author.id).count).to eq(1)
-        expect(topic.reload.user.user_stat.topic_count).to eq(0)
         expect(topic_user.reload.notification_level).to eq(TopicUser.notification_levels[:watching])
       end
 
@@ -164,9 +199,14 @@ describe TopicConverter do
         expect(private_message.topic_allowed_users.count).to eq(1)
       end
 
+      it "includes the poster of a single-post topic" do
+        moderator = Fabricate(:moderator)
+        private_message = topic.convert_to_private_message(moderator)
+        expect(private_message.allowed_users).to match_array([topic.user, moderator])
+      end
     end
 
-    context 'topic has replies' do
+    context 'when topic has replies' do
       before do
         @replied_user = Fabricate(:coding_horror)
         create_post(topic: topic, user: @replied_user)
@@ -193,7 +233,7 @@ describe TopicConverter do
       end
     end
 
-    context 'user_profiles with newly converted PM as featured topic' do
+    context 'with user_profiles with newly converted PM as featured topic' do
       it "sets all matching user_profile featured topic ids to nil" do
         author.user_profile.update(featured_topic: topic)
         topic.convert_to_private_message(admin)
@@ -201,6 +241,5 @@ describe TopicConverter do
         expect(author.user_profile.reload.featured_topic).to eq(nil)
       end
     end
-
   end
 end

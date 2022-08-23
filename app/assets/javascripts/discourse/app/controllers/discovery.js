@@ -1,5 +1,6 @@
 import Controller, { inject as controller } from "@ember/controller";
 import { alias, equal, not } from "@ember/object/computed";
+import { action } from "@ember/object";
 import Category from "discourse/models/category";
 import DiscourseURL from "discourse/lib/url";
 import { inject as service } from "@ember/service";
@@ -20,11 +21,13 @@ export default Controller.extend({
 
   loadedAllItems: not("discoveryTopics.model.canLoadMore"),
 
+  @action
   loadingBegan() {
     this.set("loading", true);
     this.set("application.showFooter", false);
   },
 
+  @action
   loadingComplete() {
     this.set("loading", false);
     this.set("application.showFooter", this.loadedAllItems);
@@ -42,17 +45,19 @@ export default Controller.extend({
 
     url += "/top";
 
-    let queryParams = this.router.currentRoute.queryParams;
-    queryParams.period = period;
-    if (Object.keys(queryParams).length) {
-      url =
-        `${url}?` +
-        Object.keys(queryParams)
-          .map((key) => `${key}=${queryParams[key]}`)
-          .join("&");
+    const urlSearchParams = new URLSearchParams();
+
+    for (const [key, value] of Object.entries(
+      this.router.currentRoute.queryParams
+    )) {
+      if (typeof value !== "undefined") {
+        urlSearchParams.set(key, value);
+      }
     }
 
-    return url;
+    urlSearchParams.set("period", period);
+
+    return `${url}?${urlSearchParams.toString()}`;
   },
 
   actions: {

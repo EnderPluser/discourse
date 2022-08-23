@@ -129,7 +129,7 @@ export default class PostCooked {
 
         // this might be an attachment
         if (lc.internal && /^\/uploads\//.test(lc.url)) {
-          valid = href.indexOf(lc.url) >= 0;
+          valid = href.includes(lc.url);
         }
 
         // Match server-side behaviour for internal links with query params
@@ -138,7 +138,7 @@ export default class PostCooked {
         }
 
         // don't display badge counts on category badge & oneboxes (unless when explicitly stated)
-        if (valid && isValidLink($link)) {
+        if (valid && isValidLink($link[0])) {
           const $onebox = $link.closest(".onebox");
           if (
             $onebox.length === 0 ||
@@ -163,7 +163,7 @@ export default class PostCooked {
     }
 
     this.expanding = true;
-
+    const blockQuote = $aside[0].querySelector("blockquote");
     $aside.data("expanded", !$aside.data("expanded"));
 
     const finished = () => (this.expanding = false);
@@ -171,14 +171,13 @@ export default class PostCooked {
     if ($aside.data("expanded")) {
       this._updateQuoteElements($aside, "chevron-up");
       // Show expanded quote
-      const $blockQuote = $("> blockquote", $aside);
-      $aside.data("original-contents", $blockQuote.html());
+      $aside.data("original-contents", blockQuote.innerHTML);
 
       const originalText =
-        $blockQuote.text().trim() ||
-        $("> blockquote", this.attrs.cooked).text().trim();
+        blockQuote.textContent.trim() ||
+        this.attrs.cooked.querySelector("blockquote").textContent.trim();
 
-      $blockQuote.html(spinnerHTML);
+      blockQuote.innerHTML = spinnerHTML;
 
       let topicId = this.attrs.topicId;
       if ($aside.data("topic")) {
@@ -205,26 +204,24 @@ export default class PostCooked {
           highlightHTML(div, originalText, {
             matchCase: true,
           });
-          $blockQuote.showHtml(div, "fast", finished);
+
+          blockQuote.innerHTML = "";
+          blockQuote.appendChild(div);
+          finished();
         })
         .catch((e) => {
           if ([403, 404].includes(e.jqXHR.status)) {
             const icon = e.jqXHR.status === 403 ? "lock" : "far-trash-alt";
-            $blockQuote.showHtml(
-              $(`<div class='expanded-quote'>${iconHTML(icon)}</div>`),
-              "fast",
-              finished
-            );
+            blockQuote.innerHTML = `<div class='expanded-quote icon-only'>${iconHTML(
+              icon
+            )}</div>`;
           }
         });
     } else {
       // Hide expanded quote
       this._updateQuoteElements($aside, "chevron-down");
-      $("blockquote", $aside).showHtml(
-        $aside.data("original-contents"),
-        "fast",
-        finished
-      );
+      blockQuote.innerHTML = $aside.data("original-contents");
+      finished();
     }
     return false;
   }
@@ -284,6 +281,11 @@ export default class PostCooked {
 
         this._updateQuoteElements($aside, "chevron-down");
         const $title = $(".title", $aside);
+
+        // If post/topic is not found then display username, skip controls
+        if (e.classList.contains("quote-post-not-found")) {
+          return (e.querySelector(".title").innerHTML = e.dataset.username);
+        }
 
         // Unless it's a full quote, allow click to expand
         if (!($aside.data("full") || $title.data("has-quote-controls"))) {

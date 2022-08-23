@@ -3,9 +3,11 @@ import { buildResolver } from "discourse-common/resolver";
 import { isTesting } from "discourse-common/config/environment";
 
 const _pluginCallbacks = [];
-let _themeErrors = [];
+let _unhandledThemeErrors = [];
 
 const Discourse = Application.extend({
+  modulePrefix: "discourse",
+
   rootElement: "#main",
 
   customEvents: {
@@ -24,12 +26,11 @@ const Discourse = Application.extend({
       if (!module) {
         throw new Error(moduleName + " must export an initializer.");
       }
-    } catch (err) {
+    } catch (error) {
       if (!themeId || isTesting()) {
-        throw err;
+        throw error;
       }
-      _themeErrors.push([themeId, err]);
-      fireThemeErrorEvent();
+      fireThemeErrorEvent({ themeId, error });
       return;
     }
 
@@ -38,12 +39,11 @@ const Discourse = Application.extend({
     init.initialize = (app) => {
       try {
         return oldInitialize.call(init, app.__container__, app);
-      } catch (err) {
+      } catch (error) {
         if (!themeId || isTesting()) {
-          throw err;
+          throw error;
         }
-        _themeErrors.push([themeId, err]);
-        fireThemeErrorEvent();
+        fireThemeErrorEvent({ themeId, error });
       }
     };
 
@@ -52,7 +52,12 @@ const Discourse = Application.extend({
 
   // Start up the Discourse application by running all the initializers we've defined.
   start() {
-    $("noscript").remove();
+    document.querySelector("noscript")?.remove();
+
+    if (Error.stackTraceLimit) {
+      // We need Errors to have full stack traces for `lib/source-identifier`
+      Error.stackTraceLimit = Infinity;
+    }
 
     Object.keys(requirejs._eak_seen).forEach((key) => {
       if (/\/pre\-initializers\//.test(key)) {
@@ -83,6 +88,12 @@ const Discourse = Application.extend({
   _registerPluginCode(version, code) {
     _pluginCallbacks.push({ version, code });
   },
+
+  ready() {
+    performance.mark("discourse-ready");
+    const event = new CustomEvent("discourse-ready");
+    document.dispatchEvent(event);
+  },
 });
 
 function moduleThemeId(moduleName) {
@@ -92,14 +103,22 @@ function moduleThemeId(moduleName) {
   }
 }
 
-function fireThemeErrorEvent() {
-  const event = new CustomEvent("discourse-theme-error");
-  document.dispatchEvent(event);
+function fireThemeErrorEvent({ themeId, error }) {
+  const event = new CustomEvent("discourse-error", {
+    cancelable: true,
+    detail: { themeId, error },
+  });
+
+  const unhandled = document.dispatchEvent(event);
+
+  if (unhandled) {
+    _unhandledThemeErrors.push(event);
+  }
 }
 
-export function getAndClearThemeErrors() {
-  const copy = _themeErrors;
-  _themeErrors = [];
+export function getAndClearUnhandledThemeErrors() {
+  const copy = _unhandledThemeErrors;
+  _unhandledThemeErrors = [];
   return copy;
 }
 

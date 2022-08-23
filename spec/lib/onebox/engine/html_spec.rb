@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe Onebox::Engine::HTML do
+RSpec.describe Onebox::Engine::HTML do
   before do
     @link = "http://amazon.com"
 

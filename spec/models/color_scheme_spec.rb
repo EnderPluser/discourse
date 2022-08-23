@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe ColorScheme do
+RSpec.describe ColorScheme do
   after do
     ColorScheme.hex_cache.clear
   end
@@ -66,7 +64,7 @@ describe ColorScheme do
       expect(third.hex).to eq 'F00D33'
     end
 
-    context "hex_for_name without anything enabled" do
+    context "with hex_for_name without anything enabled" do
       before do
         ColorScheme.hex_cache.clear
       end

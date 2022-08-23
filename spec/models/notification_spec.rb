@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
+RSpec.describe Notification do
+  fab!(:user) { Fabricate(:user) }
+  fab!(:coding_horror) { Fabricate(:coding_horror) }
 
-describe Notification do
   before do
     NotificationEmailer.enable
   end
@@ -14,7 +15,7 @@ describe Notification do
   it { is_expected.to belong_to :topic }
 
   describe '#types' do
-    context "verify enum sequence" do
+    context "when verifying enum sequence" do
       before do
         @types = Notification.types
       end
@@ -50,6 +51,7 @@ describe Notification do
         expect(@types[:event_invitation]).to eq(28)
         expect(@types[:chat_mention]).to eq(29)
         expect(@types[:chat_message]).to eq(30)
+        expect(@types[:assigned]).to eq(34)
       end
     end
   end
@@ -59,8 +61,6 @@ describe Notification do
     let(:post_args) do
       { user: topic.user, topic: topic }
     end
-
-    let(:coding_horror) { Fabricate(:coding_horror) }
 
     describe 'replies' do
       def process_alerts(post)
@@ -89,7 +89,7 @@ describe Notification do
     describe 'watching' do
       it "does notify watching users of new posts" do
         post = PostAlerter.post_created(Fabricate(:post, post_args))
-        user2 = Fabricate(:coding_horror)
+        user2 = coding_horror
         post_args[:topic].notify_watch!(user2)
         expect {
           PostAlerter.post_created(Fabricate(:post, user: post.user, topic: post.topic))
@@ -101,15 +101,14 @@ describe Notification do
       it "does not notify users of new posts" do
         post = Fabricate(:post, post_args)
         user = post_args[:user]
-        user2 = Fabricate(:coding_horror)
+        user2 = coding_horror
 
         post_args[:topic].notify_muted!(user)
         expect {
           Fabricate(:post, user: user2, topic: post.topic, raw: 'hello @' + user.username)
-        }.to change(user.notifications, :count).by(0)
+        }.not_to change(user.notifications, :count)
       end
     end
-
   end
 
   describe 'high priority creation' do
@@ -131,10 +130,9 @@ describe Notification do
   end
 
   describe 'unread counts' do
-
     fab!(:user) { Fabricate(:user) }
 
-    context 'a regular notification' do
+    context 'with a regular notification' do
       it 'increases unread_notifications' do
         expect { Fabricate(:notification, user: user); user.reload }.to change(user, :unread_notifications)
       end
@@ -148,7 +146,7 @@ describe Notification do
       end
     end
 
-    context 'a private message' do
+    context 'with a private message' do
       it "doesn't increase unread_notifications" do
         expect { Fabricate(:private_message_notification, user: user); user.reload }.not_to change(user, :unread_notifications)
       end
@@ -166,7 +164,7 @@ describe Notification do
       end
     end
 
-    context 'a bookmark reminder message' do
+    context 'with a bookmark reminder message' do
       it "doesn't increase unread_notifications" do
         expect { Fabricate(:bookmark_reminder_notification, user: user); user.reload }.not_to change(user, :unread_notifications)
       end
@@ -179,7 +177,6 @@ describe Notification do
         expect { Fabricate(:bookmark_reminder_notification, user: user); user.reload }.to change(user, :unread_high_priority_notifications)
       end
     end
-
   end
 
   describe 'message bus' do
@@ -209,7 +206,7 @@ describe Notification do
       partial_user.notifications.create!(notification_type: Notification.types[:mentioned], data: '{}')
     end
 
-    context 'destroy' do
+    context 'when destroying' do
       let!(:notification) { Fabricate(:notification) }
 
       it 'updates the notification count on destroy' do
@@ -269,8 +266,6 @@ describe Notification do
 
   describe 'saw_regular_notification_id' do
     it 'correctly updates the read state' do
-      user = Fabricate(:user)
-
       t = Fabricate(:topic)
 
       Notification.create!(read: false,
@@ -308,8 +303,6 @@ describe Notification do
 
   describe 'mark_posts_read' do
     it "marks multiple posts as read if needed" do
-      user = Fabricate(:user)
-
       (1..3).map do |i|
         Notification.create!(read: false, user_id: user.id, topic_id: 2, post_number: i, data: '{}', notification_type: 1)
       end
@@ -344,11 +337,9 @@ describe Notification do
       expect(Notification.count).to eq(2)
     end
 
-    it 'does not delete chat_message notifications' do
-      user = Fabricate(:user)
+    it 'does not delete notifications that do not have a topic_id' do
       Notification.create!(read: false, user_id: user.id, topic_id: nil, post_number: nil, data: '[]',
-                           notification_type: Notification.types[:chat_mention])
-
+                           notification_type: Notification.types[:chat_mention], high_priority: true)
       expect {
         Notification.ensure_consistency!
       }.to_not change { Notification.count }
@@ -357,7 +348,6 @@ describe Notification do
 
   describe "do not disturb" do
     it "calls NotificationEmailer.process_notification when user is not in 'do not disturb'" do
-      user = Fabricate(:user)
       notification = Notification.new(read: false, user_id: user.id, topic_id: 2, post_number: 1, data: '{}', notification_type: 1)
       NotificationEmailer.expects(:process_notification).with(notification)
       notification.save!
@@ -365,7 +355,6 @@ describe Notification do
 
     it "doesn't call NotificationEmailer.process_notification when user is in 'do not disturb'" do
       freeze_time
-      user = Fabricate(:user)
       Fabricate(:do_not_disturb_timing, user: user, starts_at: Time.zone.now, ends_at: 1.day.from_now)
 
       notification = Notification.new(read: false, user_id: user.id, topic_id: 2, post_number: 1, data: '{}', notification_type: 1)
@@ -376,7 +365,7 @@ describe Notification do
 end
 
 # pulling this out cause I don't want an observer
-describe Notification do
+RSpec.describe Notification do
   describe '#recent_report' do
     fab!(:user) { Fabricate(:user) }
     let(:post) { Fabricate(:post) }

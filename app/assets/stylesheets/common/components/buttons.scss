@@ -197,16 +197,6 @@
     }
   }
 
-  &.facebook {
-    .d-icon {
-      color: $facebook;
-    }
-    &:hover {
-      .d-icon {
-        color: $facebook;
-      }
-    }
-  }
   &.cas {
     .d-icon {
       color: var(--cas);
@@ -277,6 +267,8 @@
     color: var(--primary-low-mid);
   }
   @include hover {
+    background: transparent;
+    color: var(--primary);
     .d-icon {
       color: var(--primary);
     }
@@ -295,7 +287,32 @@
       }
     }
   }
+  &.btn-text {
+    color: var(--tertiary);
+    &[disabled] {
+      &,
+      &:hover,
+      &.btn-hover,
+      &:focus {
+        color: var(--primary);
+      }
+    }
+    &:not([disabled]) {
+      &:hover,
+      &.btn-hover,
+      &:focus {
+        color: var(--tertiary-hover);
+      }
 
+      &:active,
+      &.btn-active {
+        @include linear-gradient(
+          var(--primary-low-mid) 0%,
+          var(--primary-very-low) 100%
+        );
+      }
+    }
+  }
   &:focus {
     outline: none;
     background: var(--primary-low);

@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe SiteController do
+RSpec.describe SiteController do
   describe '#basic_info' do
     it 'is visible always even for sites requiring login' do
       upload = Fabricate(:upload)

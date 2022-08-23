@@ -1,11 +1,8 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe WildcardUrlChecker do
-
-  describe 'check_url' do
-    context 'valid url' do
+RSpec.describe WildcardUrlChecker do
+  describe '.check_url' do
+    context 'when url is valid' do
       it 'returns true' do
         result1 = described_class.check_url('https://*.discourse.org', 'https://anything.is.possible.discourse.org')
         expect(result1).to eq(true)
@@ -24,7 +21,7 @@ describe WildcardUrlChecker do
       end
     end
 
-    context 'invalid domain' do
+    context 'when url is invalid' do
       it "returns false" do
         result1 = described_class.check_url('https://*.discourse.org', 'https://bad-domain.discourse.org.evil.com')
         expect(result1).to eq(false)

@@ -1,7 +1,9 @@
+import { Promise } from "rsvp";
 import {
   avatarImg,
   avatarUrl,
   caretRowCol,
+  clipboardCopyAsync,
   defaultHomepage,
   emailValid,
   escapeExpression,
@@ -15,9 +17,13 @@ import {
   slugify,
   toAsciiPrintable,
 } from "discourse/lib/utilities";
-import { skip, test } from "qunit";
+import sinon from "sinon";
+import { test } from "qunit";
 import Handlebars from "handlebars";
-import { discourseModule } from "discourse/tests/helpers/qunit-helpers";
+import {
+  chromeTest,
+  discourseModule,
+} from "discourse/tests/helpers/qunit-helpers";
 
 discourseModule("Unit | Utilities", function () {
   test("escapeExpression", function (assert) {
@@ -282,21 +288,52 @@ discourseModule("Unit | Utilities", function () {
       }
     });
   });
+});
 
-  skip("inCodeBlock - runs fast", function (assert) {
-    const phrase = "Lorem ipsum dolor sit amet, consectetur adipiscing elit.";
-    const text = `${phrase}\n\n\`\`\`\n${phrase}\n\`\`\`\n\n${phrase}\n\n\`${phrase}\n${phrase}\n\n${phrase}\n\n[code]\n${phrase}\n[/code]\n\n${phrase}\n\n    ${phrase}\n\n\`${phrase}\`\n\n${phrase}`;
+discourseModule("Unit | Utilities | clipboard", function (hooks) {
+  let mockClipboard;
+  hooks.beforeEach(function () {
+    mockClipboard = {
+      writeText: sinon.stub().resolves(true),
+      write: sinon.stub().resolves(true),
+    };
+    sinon.stub(window.navigator, "clipboard").get(() => mockClipboard);
+  });
 
-    let time = Number.MAX_VALUE;
-    for (let i = 0; i < 10; ++i) {
-      const start = performance.now();
-      inCodeBlock(text, text.length);
-      const end = performance.now();
-      time = Math.min(time, end - start);
+  function getPromiseFunction() {
+    return () =>
+      new Promise((resolve) => {
+        resolve(
+          new Blob(["some text to copy"], {
+            type: "text/plain",
+          })
+        );
+      });
+  }
+
+  test("clipboardCopyAsync - browser does not support window.ClipboardItem", async function (assert) {
+    // without this check the stubbing will fail on Firefox
+    if (window.ClipboardItem) {
+      sinon.stub(window, "ClipboardItem").value(null);
     }
 
-    // This runs in 'keyUp' event handler so it should run as fast as
-    // possible. It should take less than 1ms for the test text.
-    assert.ok(time < 10);
+    await clipboardCopyAsync(getPromiseFunction());
+    assert.strictEqual(
+      mockClipboard.writeText.calledWith("some text to copy"),
+      true,
+      "it writes to the clipboard using writeText instead of write"
+    );
   });
+
+  chromeTest(
+    "clipboardCopyAsync - browser does support window.ClipboardItem",
+    async function (assert) {
+      await clipboardCopyAsync(getPromiseFunction());
+      assert.strictEqual(
+        mockClipboard.write.called,
+        true,
+        "it writes to the clipboard using write"
+      );
+    }
+  );
 });

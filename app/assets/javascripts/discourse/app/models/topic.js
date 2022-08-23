@@ -41,6 +41,7 @@ export function loadTopicView(topic, args) {
 }
 
 export const ID_CONSTRAINT = /^\d+$/;
+let _customLastUnreadUrlCallbacks = [];
 
 const Topic = RestModel.extend({
   message: null,
@@ -60,15 +61,14 @@ const Topic = RestModel.extend({
   @discourseComputed("posters.[]")
   lastPoster(posters) {
     if (posters && posters.length > 0) {
-      const latest = posters.filter(
-        (p) => p.extras && p.extras.indexOf("latest") >= 0
-      )[0];
+      const latest = posters.filter((p) => p.extras?.includes("latest"))[0];
       return latest || posters.firstObject;
     }
   },
 
   lastPosterUser: alias("lastPoster.user"),
   lastPosterGroup: alias("lastPoster.primary_group"),
+  allowedGroups: alias("details.allowed_groups"),
 
   @discourseComputed("posters.[]", "participants.[]", "allowed_user_count")
   featuredUsers(posters, participants, allowedUserCount) {
@@ -162,7 +162,7 @@ const Topic = RestModel.extend({
     const newTags = [];
 
     tags.forEach(function (tag) {
-      if (title.indexOf(tag.toLowerCase()) === -1) {
+      if (!title.includes(tag.toLowerCase())) {
         newTags.push(tag);
       }
     });
@@ -256,6 +256,19 @@ const Topic = RestModel.extend({
 
   @discourseComputed("last_read_post_number", "highest_post_number", "url")
   lastUnreadUrl(lastReadPostNumber, highestPostNumber) {
+    let customUrl = null;
+    _customLastUnreadUrlCallbacks.some((cb) => {
+      const result = cb(this);
+      if (result) {
+        customUrl = result;
+        return true;
+      }
+    });
+
+    if (customUrl) {
+      return customUrl;
+    }
+
     if (highestPostNumber <= lastReadPostNumber) {
       if (this.get("category.navigate_to_first_post_after_read")) {
         return this.urlForPostNumber(1);
@@ -383,9 +396,7 @@ const Topic = RestModel.extend({
     this.set(
       "bookmarks",
       this.bookmarks.filter((bookmark) => {
-        if (bookmark.id === id && bookmark.for_topic) {
-          // TODO (martin) (2022-02-01) Remove these old bookmark events, replaced by bookmarks:changed.
-          this.appEvents.trigger("topic:bookmark-toggled");
+        if (bookmark.id === id && bookmark.bookmarkable_type === "Topic") {
           this.appEvents.trigger(
             "bookmarks:changed",
             null,
@@ -403,7 +414,9 @@ const Topic = RestModel.extend({
   clearBookmarks() {
     this.toggleProperty("bookmarked");
 
-    const postIds = this.bookmarks.mapBy("post_id");
+    const postIds = this.bookmarks
+      .filterBy("bookmarkable_type", "Post")
+      .mapBy("bookmarkable_id");
     postIds.forEach((postId) => {
       const loadedPost = this.postStream.findLoadedPost(postId);
       if (loadedPost) {
@@ -548,7 +561,7 @@ const Topic = RestModel.extend({
 
   @discourseComputed("excerpt")
   excerptTruncated(excerpt) {
-    return excerpt && excerpt.substr(excerpt.length - 8, 8) === "&hellip;";
+    return excerpt && excerpt.slice(-8) === "&hellip;";
   },
 
   readLastPost: propertyEqual("last_read_post_number", "highest_post_number"),
@@ -661,7 +674,7 @@ Topic.reopenClass({
     }
   },
 
-  update(topic, props) {
+  update(topic, props, opts = {}) {
     // We support `category_id` and `categoryId` for compatibility
     if (typeof props.categoryId !== "undefined") {
       props.category_id = props.categoryId;
@@ -673,9 +686,13 @@ Topic.reopenClass({
       delete props.category_id;
     }
 
+    const data = { ...props };
+    if (opts.fastEdit) {
+      data.keep_existing_draft = true;
+    }
     return ajax(topic.get("url"), {
       type: "PUT",
-      data: JSON.stringify(props),
+      data: JSON.stringify(data),
       contentType: "application/json",
     }).then((result) => {
       // The title can be cleaned up server side
@@ -870,6 +887,15 @@ export function mergeTopic(topicId, data) {
   return ajax(`/t/${topicId}/merge-topic`, { type: "POST", data }).then(
     moveResult
   );
+}
+
+export function registerCustomLastUnreadUrlCallback(fn) {
+  _customLastUnreadUrlCallbacks.push(fn);
+}
+
+// Should only be used in tests
+export function clearCustomLastUnreadUrlCallbacks() {
+  _customLastUnreadUrlCallbacks.clear();
 }
 
 export default Topic;

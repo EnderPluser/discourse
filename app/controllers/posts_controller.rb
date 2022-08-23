@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 class PostsController < ApplicationController
+  # Bug with Rails 7+
+  # see https://github.com/rails/rails/issues/44867
+  self._flash_types -= [:notice]
 
   requires_login except: [
     :show,
@@ -9,7 +12,7 @@ class PostsController < ApplicationController
     :by_date,
     :short_link,
     :reply_history,
-    :replyIids,
+    :reply_ids,
     :revisions,
     :latest_revision,
     :expand_embed,
@@ -28,24 +31,33 @@ class PostsController < ApplicationController
     :user_posts_feed
   ]
 
+  MARKDOWN_TOPIC_PAGE_SIZE ||= 100
+
   def markdown_id
-    markdown Post.find(params[:id].to_i)
+    markdown Post.find_by(id: params[:id].to_i)
   end
 
   def markdown_num
     if params[:revision].present?
       post_revision = find_post_revision_from_topic_id
       render plain: post_revision.modifications[:raw].last
+    elsif params[:post_number].present?
+      markdown Post.find_by(topic_id: params[:topic_id].to_i, post_number: params[:post_number].to_i)
     else
-      markdown Post.find_by(topic_id: params[:topic_id].to_i, post_number: (params[:post_number] || 1).to_i)
-    end
-  end
+      opts = params.slice(:page)
+      opts[:limit] = MARKDOWN_TOPIC_PAGE_SIZE
+      topic_view = TopicView.new(params[:topic_id], current_user, opts)
+      content = topic_view.posts.map do |p|
+        <<~MD
+          #{p.user.username} | #{p.updated_at} | ##{p.post_number}
 
-  def markdown(post)
-    if post && guardian.can_see?(post)
-      render plain: post.raw
-    else
-      raise Discourse::NotFound
+          #{p.raw}
+
+          -------------------------
+
+        MD
+      end
+      render plain: content.join
     end
   end
 
@@ -75,6 +87,7 @@ class PostsController < ApplicationController
         .includes(:reply_to_user)
         .limit(50)
       rss_description = I18n.t("rss_description.posts")
+      @use_canonical = true
     end
 
     # Remove posts the user doesn't have permission to see
@@ -122,7 +135,7 @@ class PostsController < ApplicationController
       format.rss do
         @posts = posts
         @title = "#{SiteSetting.title} - #{I18n.t("rss_description.user_posts", username: user.username)}"
-        @link = "#{Discourse.base_url}/u/#{user.username}/activity"
+        @link = "#{user.full_url}/activity"
         @description = I18n.t("rss_description.user_posts", username: user.username)
         render 'posts/latest', formats: [:rss]
       end
@@ -151,10 +164,12 @@ class PostsController < ApplicationController
   end
 
   def short_link
-    post = Post.find(params[:post_id].to_i)
+    post = Post.find_by(id: params[:post_id].to_i)
+    raise Discourse::NotFound unless post
+
     # Stuff the user in the request object, because that's what IncomingLink wants
     if params[:user_id]
-      user = User.find(params[:user_id].to_i)
+      user = User.find_by(id: params[:user_id].to_i)
       request['u'] = user.username_lower if user
     end
 
@@ -165,6 +180,7 @@ class PostsController < ApplicationController
   def create
     @manager_params = create_params
     @manager_params[:first_post_checks] = !is_api?
+    @manager_params[:advance_draft] = !is_api?
 
     manager = NewPostManager.new(current_user, @manager_params)
 
@@ -297,20 +313,20 @@ class PostsController < ApplicationController
   end
 
   def all_reply_ids
+    Discourse.deprecate("/posts/:id/reply-ids/all is deprecated.", drop_from: "3.0")
+
     post = find_post_from_params
     render json: post.reply_ids(guardian, only_replies_to_single_post: false).to_json
   end
 
   def destroy
     post = find_post_from_params
+    force_destroy = ActiveModel::Type::Boolean.new.cast(params[:force_destroy])
 
-    force_destroy = false
-    if params[:force_destroy].present?
+    if force_destroy
       if !guardian.can_permanently_delete?(post)
         return render_json_error post.cannot_permanently_delete_reason(current_user), status: 403
       end
-
-      force_destroy = true
     else
       guardian.ensure_can_delete!(post)
     end
@@ -320,8 +336,12 @@ class PostsController < ApplicationController
       RateLimiter.new(current_user, "delete_post_per_day", SiteSetting.max_post_deletions_per_day, 1.day).performed!
     end
 
-    destroyer = PostDestroyer.new(current_user, post, context: params[:context], force_destroy: force_destroy)
-    destroyer.destroy
+    PostDestroyer.new(
+      current_user,
+      post,
+      context: params[:context],
+      force_destroy: force_destroy
+    ).destroy
 
     render body: nil
   end
@@ -521,14 +541,19 @@ class PostsController < ApplicationController
   def destroy_bookmark
     params.require(:post_id)
 
-    bookmark_id = Bookmark.where(post_id: params[:post_id], user_id: current_user.id).pluck_first(:id)
-    result = BookmarkManager.new(current_user).destroy(bookmark_id)
+    bookmark_id = Bookmark.where(
+      bookmarkable_id: params[:post_id],
+      bookmarkable_type: "Post",
+      user_id: current_user.id
+    ).pluck_first(:id)
+    destroyed_bookmark = BookmarkManager.new(current_user).destroy(bookmark_id)
 
-    render json: success_json.merge(result)
+    render json: success_json.merge(BookmarkManager.bookmark_metadata(destroyed_bookmark, current_user))
   end
 
   def wiki
     post = find_post_from_params
+    params.require(:wiki)
     guardian.ensure_can_wiki!(post)
 
     post.revise(current_user, wiki: params[:wiki])
@@ -538,8 +563,10 @@ class PostsController < ApplicationController
 
   def post_type
     guardian.ensure_can_change_post_type!
-
     post = find_post_from_params
+    params.require(:post_type)
+    raise Discourse::InvalidParameters.new(:post_type) if Post.types[params[:post_type].to_i].blank?
+
     post.revise(current_user, post_type: params[:post_type].to_i)
 
     render body: nil
@@ -608,6 +635,14 @@ class PostsController < ApplicationController
 
   protected
 
+  def markdown(post)
+    if post && guardian.can_see?(post)
+      render plain: post.raw
+    else
+      raise Discourse::NotFound
+    end
+  end
+
   # We can't break the API for making posts. The new, queue supporting API
   # doesn't return the post as the root JSON object, but as a nested object.
   # If a param is present it uses that result structure.
@@ -672,10 +707,13 @@ class PostsController < ApplicationController
   private
 
   def user_posts(guardian, user_id, opts)
-    posts = Post.includes(:user, :topic, :deleted_by, :user_actions)
-      .where(user_id: user_id)
-      .with_deleted
-      .order(created_at: :desc)
+    # Topic.unscoped is necessary to remove the default deleted_at: nil scope
+    posts = Topic.unscoped do
+      Post.includes(:user, :topic, :deleted_by, :user_actions)
+        .where(user_id: user_id)
+        .with_deleted
+        .order(created_at: :desc)
+    end
 
     if guardian.user.moderator?
 
@@ -740,6 +778,8 @@ class PostsController < ApplicationController
       # We allow `created_at` via the API
       permitted << :created_at
 
+      # We allow `external_id` via the API
+      permitted << :external_id
     end
 
     result = params.permit(*permitted).tap do |allowed|
@@ -846,7 +886,7 @@ class PostsController < ApplicationController
     post = finder.with_deleted.first
     raise Discourse::NotFound unless post
 
-    post.topic = Topic.with_deleted.find(post.topic_id)
+    post.topic = Topic.with_deleted.find_by(id: post.topic_id)
 
     if !post.topic ||
        (

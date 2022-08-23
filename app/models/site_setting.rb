@@ -4,8 +4,21 @@ class SiteSetting < ActiveRecord::Base
   extend GlobalPath
   extend SiteSettingExtension
 
+  has_many :upload_references, as: :target, dependent: :destroy
+
   validates_presence_of :name
   validates_presence_of :data_type
+
+  after_save do
+    if saved_change_to_value?
+      if self.data_type == SiteSettings::TypeSupervisor.types[:upload]
+        UploadReference.ensure_exist!(upload_ids: [self.value], target: self)
+      elsif self.data_type == SiteSettings::TypeSupervisor.types[:uploaded_image_list]
+        upload_ids = self.value.split('|').compact.uniq
+        UploadReference.ensure_exist!(upload_ids: upload_ids, target: self)
+      end
+    end
+  end
 
   def self.load_settings(file, plugin: nil)
     SiteSettings::YamlLoader.new(file).load do |category, name, default, opts|
@@ -15,7 +28,7 @@ class SiteSetting < ActiveRecord::Base
 
   load_settings(File.join(Rails.root, 'config', 'site_settings.yml'))
 
-  unless Rails.env.test? && ENV['LOAD_PLUGINS'] != "1"
+  if GlobalSetting.load_plugins?
     Dir[File.join(Rails.root, "plugins", "*", "config", "settings.yml")].each do |file|
       load_settings(file, plugin: file.split("/")[-3])
     end
@@ -101,23 +114,33 @@ class SiteSetting < ActiveRecord::Base
     :markdown_typographer_quotation_marks
   ]
 
-  def self.reset_cached_settings!
-    @blocked_attachment_content_types_regex = nil
-    @blocked_attachment_filenames_regex = nil
-    @allowed_unicode_username_regex = nil
-  end
-
   def self.blocked_attachment_content_types_regex
-    @blocked_attachment_content_types_regex ||= Regexp.union(SiteSetting.blocked_attachment_content_types.split("|"))
+    current_db = RailsMultisite::ConnectionManagement.current_db
+
+    @blocked_attachment_content_types_regex ||= {}
+    @blocked_attachment_content_types_regex[current_db] ||= begin
+      Regexp.union(SiteSetting.blocked_attachment_content_types.split("|"))
+    end
   end
 
   def self.blocked_attachment_filenames_regex
-    @blocked_attachment_filenames_regex ||= Regexp.union(SiteSetting.blocked_attachment_filenames.split("|"))
+    current_db = RailsMultisite::ConnectionManagement.current_db
+
+    @blocked_attachment_filenames_regex ||= {}
+    @blocked_attachment_filenames_regex[current_db] ||= begin
+      Regexp.union(SiteSetting.blocked_attachment_filenames.split("|"))
+    end
   end
 
   def self.allowed_unicode_username_characters_regex
-    @allowed_unicode_username_regex ||= SiteSetting.allowed_unicode_username_characters.present? \
-      ? Regexp.new(SiteSetting.allowed_unicode_username_characters) : nil
+    current_db = RailsMultisite::ConnectionManagement.current_db
+
+    @allowed_unicode_username_regex ||= {}
+    @allowed_unicode_username_regex[current_db] ||= begin
+      if SiteSetting.allowed_unicode_username_characters.present?
+        Regexp.new(SiteSetting.allowed_unicode_username_characters)
+      end
+    end
   end
 
   # helpers for getting s3 settings that fallback to global
@@ -166,6 +189,14 @@ class SiteSetting < ActiveRecord::Base
 
   def self.Upload
     SiteSetting::Upload
+  end
+
+  def self.whispers_allowed_group_ids
+    if SiteSetting.enable_whispers && SiteSetting.whispers_allowed_groups.present?
+      SiteSetting.whispers_allowed_groups.split("|").map(&:to_i)
+    else
+      []
+    end
   end
 
   def self.require_invite_code
@@ -245,6 +276,16 @@ class SiteSetting < ActiveRecord::Base
       Discourse.deprecate("#{old_method.to_s} is deprecated, use the #{new_method.to_s}.", drop_from: "2.6", raise_error: true)
       send("#{new_method}=", args)
     end
+  end
+
+  protected
+
+  def self.clear_cache!
+    super
+
+    @blocked_attachment_content_types_regex = nil
+    @blocked_attachment_filenames_regex = nil
+    @allowed_unicode_username_regex = nil
   end
 end
 

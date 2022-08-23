@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Admin::VersionsController do
+RSpec.describe Admin::VersionsController do
 
   before do
     Jobs::VersionCheck.any_instance.stubs(:execute).returns(true)

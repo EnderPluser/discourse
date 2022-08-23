@@ -1,6 +1,7 @@
-import DiscourseRoute from "discourse/routes/discourse";
-import { ajax } from "discourse/lib/ajax";
 import { action } from "@ember/object";
+import { ajax } from "discourse/lib/ajax";
+import DiscourseRoute from "discourse/routes/discourse";
+import { Promise } from "rsvp";
 
 export default DiscourseRoute.extend({
   queryParams: {
@@ -8,8 +9,23 @@ export default DiscourseRoute.extend({
     q: { refreshModel: true },
   },
 
-  model(params) {
+  model(params, transition) {
     const controller = this.controllerFor("user-activity-bookmarks");
+
+    if (
+      this.isPoppedState(transition) &&
+      this.session.bookmarksModel &&
+      this.session.bookmarksModel.searchTerm === params.q
+    ) {
+      return Promise.resolve(this.session.bookmarksModel);
+    }
+
+    this.session.setProperties({
+      bookmarksModel: null,
+      bookmarkListScrollPosition: null,
+    });
+
+    controller.set("loading", true);
 
     return this._loadBookmarks(params)
       .then((response) => {
@@ -22,9 +38,12 @@ export default DiscourseRoute.extend({
         );
         const loadMoreUrl = response.user_bookmark_list.more_bookmarks_url;
 
-        return { bookmarks, loadMoreUrl };
+        const model = { bookmarks, loadMoreUrl };
+        this.session.set("bookmarksModel", model);
+        return model;
       })
-      .catch(() => controller.set("permissionDenied", true));
+      .catch(() => controller.set("permissionDenied", true))
+      .finally(() => controller.set("loading", false));
   },
 
   renderTemplate() {
@@ -35,15 +54,6 @@ export default DiscourseRoute.extend({
   didTransition() {
     this.controllerFor("user-activity")._showFooter();
     return true;
-  },
-
-  @action
-  loading(transition) {
-    let controller = this.controllerFor("user-activity-bookmarks");
-    controller.set("loading", true);
-    transition.promise.finally(function () {
-      controller.set("loading", false);
-    });
   },
 
   @action

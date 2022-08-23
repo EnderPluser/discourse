@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe UserSummary do
+RSpec.describe UserSummary do
 
   it "produces secure summaries" do
     topic = create_post.topic

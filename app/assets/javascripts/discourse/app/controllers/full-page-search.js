@@ -3,6 +3,7 @@ import discourseComputed, { observes } from "discourse-common/utils/decorators";
 import {
   getSearchKey,
   isValidSearchTerm,
+  logSearchLinkClick,
   searchContextDescription,
   translateResults,
   updateRecentSearches,
@@ -193,7 +194,7 @@ export default Controller.extend({
 
   @discourseComputed("q")
   showLikeCount(q) {
-    return q && q.indexOf("order:likes") > -1;
+    return q?.includes("order:likes");
   },
 
   @observes("q")
@@ -210,10 +211,11 @@ export default Controller.extend({
     return (
       q &&
       this.currentUser &&
-      (q.indexOf("in:personal") > -1 ||
-        q.indexOf(
+      (q.includes("in:messages") ||
+        q.includes("in:personal") ||
+        q.includes(
           `personal_messages:${this.currentUser.get("username_lower")}`
-        ) > -1)
+        ))
     );
   },
 
@@ -392,7 +394,7 @@ export default Controller.extend({
   actions: {
     createTopic(searchTerm) {
       let topicCategory;
-      if (searchTerm.indexOf("category:") !== -1) {
+      if (searchTerm.includes("category:")) {
         const match = searchTerm.match(/category:(\S*)/);
         if (match && match[1]) {
           topicCategory = match[1];
@@ -406,7 +408,7 @@ export default Controller.extend({
     },
 
     selectAll() {
-      this.selected.addObjects(this.get("model.posts")).mapBy("topic");
+      this.selected.addObjects(this.get("model.posts").mapBy("topic"));
 
       // Doing this the proper way is a HUGE pain,
       // we can hack this to work by observing each on the array
@@ -470,15 +472,10 @@ export default Controller.extend({
 
     logClick(topicId) {
       if (this.get("model.grouped_search_result.search_log_id") && topicId) {
-        ajax("/search/click", {
-          type: "POST",
-          data: {
-            search_log_id: this.get(
-              "model.grouped_search_result.search_log_id"
-            ),
-            search_result_id: topicId,
-            search_result_type: "topic",
-          },
+        logSearchLinkClick({
+          searchLogId: this.get("model.grouped_search_result.search_log_id"),
+          searchResultId: topicId,
+          searchResultType: "topic",
         });
       }
     },

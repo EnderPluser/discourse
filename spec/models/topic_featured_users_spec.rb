@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe TopicFeaturedUsers do
+RSpec.describe TopicFeaturedUsers do
   it 'ensures consistency' do
 
     t = Fabricate(:topic)

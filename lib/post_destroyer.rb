@@ -5,7 +5,6 @@
 # this class contains the logic to delete it.
 #
 class PostDestroyer
-
   def self.destroy_old_hidden_posts
     Post.where(deleted_at: nil, hidden: true)
       .where("hidden_at < ?", 30.days.ago)
@@ -99,6 +98,7 @@ class PostDestroyer
     topic.update_column(:user_id, Discourse::SYSTEM_USER_ID) if !topic.user_id
     topic.recover!(@user) if @post.is_first_post?
     topic.update_statistics
+    Topic.publish_stats_to_clients!(topic.id, :recovered)
 
     UserActionManager.post_created(@post)
     DiscourseEvent.trigger(:post_recovered, @post, @opts, @user)
@@ -132,16 +132,12 @@ class PostDestroyer
 
       if @post.is_first_post?
         # Update stats of all people who replied
-        counts = Post.where(post_type: Post.types[:regular], topic_id: @post.topic_id).where('post_number > 1').group(:user_id).count
-        counts.each do |user_id, count|
-          if user_stat = UserStat.where(user_id: user_id).first
-            user_stat.update(post_count: user_stat.post_count + count)
-          end
-        end
+        update_post_counts(:increment)
       end
     end
 
-    @post.publish_change_to_clients! :recovered
+    # skip also publishing topic stats because they weren't updated yet
+    @post.publish_change_to_clients! :recovered, { skip_topic_stats: true }
     TopicTrackingState.publish_recover(@post.topic) if @post.topic && @post.is_first_post?
   end
 
@@ -149,14 +145,23 @@ class PostDestroyer
   # show up in the topic
   # Permanent option allows to hard delete.
   def perform_delete
+    # All posts in the topic must be force deleted if the first is force
+    # deleted (except @post which is destroyed by current instance).
+    if @topic && @post.is_first_post? && permanent?
+      @topic.ordered_posts.with_deleted.reverse_order.find_each do |post|
+        PostDestroyer.new(@user, post, @opts).destroy if post.id != @post.id
+      end
+    end
+
     Post.transaction do
       permanent? ? @post.destroy! : @post.trash!(@user)
       if @post.topic
         make_previous_post_the_last_one
         mark_topic_changed
         clear_user_posted_flag
-        Topic.reset_highest(@post.topic_id)
       end
+
+      Topic.reset_highest(@post.topic_id)
       trash_public_post_actions
       trash_revisions
       trash_user_actions
@@ -177,12 +182,13 @@ class PostDestroyer
       end
       TopicLink.where(link_post_id: @post.id).destroy_all
       update_associated_category_latest_topic
-      update_user_counts
+      update_user_counts if !permanent?
       TopicUser.update_post_action_cache(post_id: @post.id)
 
       DB.after_commit do
         if @opts[:reviewable]
           notify_deletion(@opts[:reviewable], { notify_responders: @opts[:notify_responders], parent_post: @opts[:parent_post] })
+          ignore(@post.reviewable_flag) if @post.reviewable_flag && SiteSetting.notify_users_after_responses_deleted_on_flagged_post
         elsif reviewable = @post.reviewable_flag
           @opts[:defer_flags] ? ignore(reviewable) : agree(reviewable)
         end
@@ -329,9 +335,10 @@ class PostDestroyer
     Jobs.enqueue(
       :send_system_message,
       user_id: @post.user_id,
-      message_type: notify_responders ? :flags_agreed_and_post_deleted_for_responders : :flags_agreed_and_post_deleted,
+      message_type: notify_responders ? "flags_agreed_and_post_deleted_for_responders" : "flags_agreed_and_post_deleted",
       message_options: {
         flagged_post_raw_content: notify_responders ? options[:parent_post].raw : @post.raw,
+        flagged_post_response_raw_content: @post.raw,
         url: notify_responders ? options[:parent_post].url : @post.url,
         flag_reason: I18n.t(
           "flag_reasons#{".responder" if notify_responders}.#{PostActionType.types[rs.reviewable_score_type]}",
@@ -385,31 +392,18 @@ class PostDestroyer
     author.create_user_stat if author.user_stat.nil?
 
     if @post.created_at == author.user_stat.first_post_created_at
-      author.user_stat.first_post_created_at = author.posts.order('created_at ASC').first.try(:created_at)
+      author.user_stat.update!(first_post_created_at: author.posts.order('created_at ASC').first.try(:created_at))
     end
 
-    if @post.topic && !@post.topic.private_message?
-      if @post.post_type == Post.types[:regular] && !@post.is_first_post? && !@topic.nil?
-        author.user_stat.post_count -= 1
-      end
-      author.user_stat.topic_count -= 1 if @post.is_first_post?
-    end
-
-    author.user_stat.save!
+    UserStatCountUpdater.decrement!(@post)
 
     if @post.created_at == author.last_posted_at
-      author.last_posted_at = author.posts.order('created_at DESC').first.try(:created_at)
-      author.save!
+      author.update_column(:last_posted_at, author.posts.order('created_at DESC').first.try(:created_at))
     end
 
     if @post.is_first_post? && @post.topic && !@post.topic.private_message?
       # Update stats of all people who replied
-      counts = Post.where(post_type: Post.types[:regular], topic_id: @post.topic_id).where('post_number > 1').group(:user_id).count
-      counts.each do |user_id, count|
-        if user_stat = UserStat.where(user_id: user_id).first
-          user_stat.update(post_count: user_stat.post_count - count)
-        end
-      end
+      update_post_counts(:decrement)
     end
   end
 
@@ -420,4 +414,19 @@ class PostDestroyer
     incoming.update(imap_sync: sync)
   end
 
+  def update_post_counts(operator)
+    counts = Post.where(
+      post_type: Post.types[:regular], topic_id: @post.topic_id
+    ).where('post_number > 1').group(:user_id).count
+
+    counts.each do |user_id, count|
+      if user_stat = UserStat.where(user_id: user_id).first
+        if operator == :decrement
+          UserStatCountUpdater.set!(user_stat: user_stat, count: user_stat.post_count - count, count_column: :post_count)
+        else
+          UserStatCountUpdater.set!(user_stat: user_stat, count: user_stat.post_count + count, count_column: :post_count)
+        end
+      end
+    end
+  end
 end

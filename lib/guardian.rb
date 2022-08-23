@@ -47,10 +47,16 @@ class Guardian
     def silenced?
       false
     end
+    def is_system_user?
+      false
+    end
     def secure_category_ids
       []
     end
     def topic_create_allowed_category_ids
+      []
+    end
+    def groups
       []
     end
     def has_trust_level?(level)
@@ -61,6 +67,9 @@ class Guardian
     end
     def email
       nil
+    end
+    def whisperer?
+      false
     end
   end
 
@@ -96,15 +105,26 @@ class Guardian
     @user.moderator?
   end
 
-  def is_category_group_moderator?(category)
-    return false unless category
-    return false unless authenticated?
+  def is_whisperer?
+    @user.whisperer?
+  end
 
-    @is_category_group_moderator ||= begin
-      SiteSetting.enable_category_group_moderation? &&
-        category.present? &&
-        category.reviewable_by_group_id.present? &&
-        GroupUser.where(group_id: category.reviewable_by_group_id, user_id: @user.id).exists?
+  def is_category_group_moderator?(category)
+    return false if !SiteSetting.enable_category_group_moderation?
+    return false if !category
+    return false if !authenticated?
+
+    reviewable_by_group_id = category.reviewable_by_group_id
+    return false if reviewable_by_group_id.blank?
+
+    @is_group_member ||= {}
+
+    if @is_group_member.key?(reviewable_by_group_id)
+      @is_group_member[reviewable_by_group_id]
+    else
+      @is_group_member[reviewable_by_group_id] = begin
+        GroupUser.where(group_id: reviewable_by_group_id, user_id: @user.id).exists?
+      end
     end
   end
 
@@ -422,6 +442,7 @@ class Guardian
   def can_send_private_message?(target, notify_moderators: false)
     is_user = target.is_a?(User)
     is_group = target.is_a?(Group)
+    from_system = @user.is_system_user?
 
     (is_group || is_user) &&
     # User is authenticated
@@ -435,7 +456,7 @@ class Guardian
     # Can't send PMs to suspended users
     (is_staff? || is_group || !target.suspended?) &&
     # Check group messageable level
-    (is_staff? || is_user || Group.messageable(@user).where(id: target.id).exists? || notify_moderators) &&
+    (from_system || is_user || Group.messageable(@user).where(id: target.id).exists? || notify_moderators) &&
     # Silenced users can only send PM to staff
     (!is_silenced? || target.staff?)
   end

@@ -14,9 +14,9 @@ class DiscourseRedis
     GlobalSetting.redis_config
   end
 
-  def initialize(config = nil, namespace: true)
+  def initialize(config = nil, namespace: true, raw_redis: nil)
     @config = config || DiscourseRedis.config
-    @redis = DiscourseRedis.raw_connection(@config.dup)
+    @redis = raw_redis || DiscourseRedis.raw_connection(@config.dup)
     @namespace = namespace
   end
 
@@ -76,10 +76,11 @@ class DiscourseRedis
     DiscourseRedis.ignore_readonly { @redis.mget(*args) }
   end
 
-  def del(k)
+  def del(*keys)
     DiscourseRedis.ignore_readonly do
-      k = "#{namespace}:#{k}"  if @namespace
-      @redis.del k
+      keys = keys.flatten(1)
+      keys.map! { |k| "#{namespace}:#{k}" } if @namespace
+      @redis.del(*keys)
     end
   end
 
@@ -145,13 +146,32 @@ class DiscourseRedis
     RailsMultisite::ConnectionManagement.current_db
   end
 
-  def self.namespace
-    Rails.logger.warn("DiscourseRedis.namespace is going to be deprecated, do not use it!")
-    RailsMultisite::ConnectionManagement.current_db
-  end
-
   def self.new_redis_store
     Cache.new
+  end
+
+  def multi
+    DiscourseRedis.ignore_readonly do
+      if block_given?
+        @redis.multi do |transaction|
+          yield DiscourseRedis.new(@config, namespace: @namespace, raw_redis: transaction)
+        end
+      else
+        @redis.multi
+      end
+    end
+  end
+
+  def pipelined
+    DiscourseRedis.ignore_readonly do
+      if block_given?
+        @redis.pipelined do |transaction|
+          yield DiscourseRedis.new(@config, namespace: @namespace, raw_redis: transaction)
+        end
+      else
+        @redis.pipelined
+      end
+    end
   end
 
   private
@@ -160,4 +180,20 @@ class DiscourseRedis
     key[(namespace.length + 1)..-1]
   end
 
+  class EvalHelper
+    def initialize(script)
+      @script = script
+      @sha1 = Digest::SHA1.hexdigest(script)
+    end
+
+    def eval(redis, *args, **kwargs)
+      redis.evalsha @sha1, *args, **kwargs
+    rescue ::Redis::CommandError => e
+      if e.to_s =~ /^NOSCRIPT/
+        redis.eval @script, *args, **kwargs
+      else
+        raise
+      end
+    end
+  end
 end

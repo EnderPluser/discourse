@@ -1,13 +1,11 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe PostReply do
+RSpec.describe PostReply do
   fab!(:topic) { Fabricate(:topic) }
   fab!(:post) { Fabricate(:post, topic: topic) }
   fab!(:other_post) { Fabricate(:post, topic: topic) }
 
-  context "validation" do
+  describe "Validations" do
     it "should ensure that the posts belong in the same topic" do
       expect(PostReply.new(post: post, reply: other_post)).to be_valid
 

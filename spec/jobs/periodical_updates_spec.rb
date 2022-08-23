@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Jobs::PeriodicalUpdates do
+RSpec.describe Jobs::PeriodicalUpdates do
 
   it "works" do
 

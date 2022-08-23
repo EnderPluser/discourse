@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Post do
+RSpec.describe Post do
 
   before do
     Jobs.run_immediately!

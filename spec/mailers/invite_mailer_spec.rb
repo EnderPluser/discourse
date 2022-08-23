@@ -1,14 +1,9 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe InviteMailer do
-
+RSpec.describe InviteMailer do
   describe "send_invite" do
-
-    context "invite to site" do
-
-      context "default invite message" do
+    context "when inviting to site" do
+      context "with default invite message" do
         fab!(:invite) { Fabricate(:invite) }
         let(:invite_mail) { InviteMailer.send_invite(invite) }
 
@@ -37,7 +32,7 @@ describe InviteMailer do
         end
       end
 
-      context "custom invite message" do
+      context "with custom invite message" do
         fab!(:invite) {
           Fabricate(
             :invite,
@@ -45,7 +40,7 @@ describe InviteMailer do
           )
         }
 
-        context "custom message includes invite link" do
+        context "when custom message includes invite link" do
           let(:custom_invite_mail) { InviteMailer.send_invite(invite) }
 
           it 'renders the invitee email' do
@@ -80,11 +75,11 @@ describe InviteMailer do
       end
     end
 
-    context "invite to topic" do
+    context "when inviting to topic" do
       let(:trust_level_2) { build(:user, trust_level: 2) }
       let(:topic) { Fabricate(:topic, excerpt: "Topic invite support is now available in Discourse!", user: trust_level_2) }
 
-      context "default invite message" do
+      context "with default invite message" do
         let(:invite) do
           topic.invite(topic.user, 'name@example.com')
           Invite.find_by(invited_by_id: topic.user.id)
@@ -133,7 +128,7 @@ describe InviteMailer do
         end
       end
 
-      context "custom invite message" do
+      context "with custom invite message" do
         let(:invite) do
           topic.invite(
             topic.user,
@@ -156,5 +151,4 @@ describe InviteMailer do
       end
     end
   end
-
 end

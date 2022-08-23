@@ -1,19 +1,18 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
 RSpec.describe PostActionsController do
+  fab!(:user) { Fabricate(:user) }
+  fab!(:coding_horror) { Fabricate(:coding_horror) }
+
   describe '#destroy' do
-    fab!(:post) { Fabricate(:post, user: Fabricate(:coding_horror)) }
+    fab!(:post) { Fabricate(:post, user: coding_horror) }
 
     it 'requires you to be logged in' do
       delete "/post_actions/#{post.id}.json"
       expect(response.status).to eq(403)
     end
 
-    context 'logged in' do
-      fab!(:user) { Fabricate(:user) }
-
+    context 'when logged in' do
       before do
         sign_in(user)
       end
@@ -24,7 +23,7 @@ RSpec.describe PostActionsController do
       end
 
       it "returns 404 when the post action type doesn't exist for that user" do
-        delete "/post_actions/#{post.id}.json", params: { post_action_type_id: PostActionType.types[:bookmark] }
+        delete "/post_actions/#{post.id}.json", params: { post_action_type_id: PostActionType.types[:like] }
         expect(response.status).to eq(404)
       end
 
@@ -33,36 +32,31 @@ RSpec.describe PostActionsController do
           PostAction.create!(
             user_id: user.id,
             post_id: post.id,
-            post_action_type_id: PostActionType.types[:bookmark]
+            post_action_type_id: PostActionType.types[:like]
           )
         end
 
         it 'returns success' do
-          delete "/post_actions/#{post.id}.json", params: { post_action_type_id: PostActionType.types[:bookmark] }
+          delete "/post_actions/#{post.id}.json", params: { post_action_type_id: PostActionType.types[:like] }
           expect(response.status).to eq(200)
         end
 
         it 'deletes the action' do
           delete "/post_actions/#{post.id}.json", params: {
-            post_action_type_id: PostActionType.types[:bookmark]
+            post_action_type_id: PostActionType.types[:like]
           }
 
           expect(response.status).to eq(200)
           expect(PostAction.exists?(
             user_id: user.id,
             post_id: post.id,
-            post_action_type_id: PostActionType.types[:bookmark],
+            post_action_type_id: PostActionType.types[:like],
             deleted_at: nil
           )).to eq(false)
         end
 
         it "isn't deleted when the user doesn't have permission" do
-          pa = PostAction.create!(
-            post: post,
-            user: user,
-            post_action_type_id: PostActionType.types[:like],
-            created_at: 1.day.ago
-          )
+          post_action.update!(created_at: 1.day.ago)
 
           delete "/post_actions/#{post.id}.json", params: {
             post_action_type_id: PostActionType.types[:like]
@@ -81,19 +75,19 @@ RSpec.describe PostActionsController do
     end
 
     it 'fails when the user does not have permission to see the post' do
-      sign_in(Fabricate(:user))
-      pm = Fabricate(:private_message_post, user: Fabricate(:coding_horror))
+      sign_in(user)
+      pm = Fabricate(:private_message_post, user: coding_horror)
 
       post "/post_actions.json", params: {
         id: pm.id,
-        post_action_type_id: PostActionType.types[:bookmark]
+        post_action_type_id: PostActionType.types[:like]
       }
 
       expect(response.status).to eq(403)
     end
 
     it 'fails when the user tries to notify user that has disabled PM' do
-      sign_in(Fabricate(:user))
+      sign_in(user)
       user2 = Fabricate(:user)
 
       post = Fabricate(:post, user: user2)
@@ -115,7 +109,7 @@ RSpec.describe PostActionsController do
 
     describe 'as a moderator' do
       fab!(:user) { Fabricate(:moderator) }
-      fab!(:post_1) { Fabricate(:post, user: Fabricate(:coding_horror)) }
+      fab!(:post_1) { Fabricate(:post, user: coding_horror) }
 
       before do
         sign_in(user)

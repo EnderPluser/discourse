@@ -14,13 +14,16 @@
       color: rgba(var(--primary-rgb), 0.85);
     }
   }
+  h2.login-with {
+    color: var(--secondary);
+  }
   #login-buttons:not(.hidden) {
     display: flex;
     flex: 0 1 auto;
     flex-direction: column;
     align-items: stretch;
     min-height: 75px;
-    min-width: 160px;
+    min-width: 200px;
     order: 2;
 
     &:focus-within,
@@ -211,7 +214,7 @@
   }
   .has-alt-auth .create-account-form {
     display: grid;
-    grid-template-columns: 65% 35%;
+    grid-template-columns: 60% 40%;
     grid-template-rows: auto 1fr;
     grid-template-areas:
       "header login-buttons"
@@ -394,8 +397,8 @@
 .email-login,
 .invites-show {
   .col-form {
-    padding-left: 20px;
-    width: 400px;
+    padding: 0.5em 2em 1em;
+    max-width: 30em;
   }
   .col-image {
     width: 175px;
@@ -403,12 +406,19 @@
       width: 100%;
     }
   }
+  details {
+    width: 100%;
+  }
   h2 {
     margin-bottom: 12px;
   }
   input:not([type="checkbox"]) {
     // 80% width on checkboxes messes up the layout for custom fields
     width: 80%;
+  }
+  .invite-form,
+  .invite-success {
+    box-shadow: shadow("card");
   }
 }
 

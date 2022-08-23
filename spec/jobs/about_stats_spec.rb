@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Jobs::AboutStats do
+RSpec.describe Jobs::AboutStats do
   it 'caches the stats' do
     begin
       stats = About.fetch_stats.to_json

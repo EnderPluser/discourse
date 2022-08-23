@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe TrustLevelGranter do
+RSpec.describe TrustLevelGranter do
 
   describe 'grant' do
 

@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe UserVisit do
+RSpec.describe UserVisit do
   fab!(:user) { Fabricate(:user) }
   fab!(:other_user) { Fabricate(:user) }
 

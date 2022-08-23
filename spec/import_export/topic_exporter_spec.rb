@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
-require "rails_helper"
 require "import_export"
 
-describe ImportExport::TopicExporter do
+RSpec.describe ImportExport::TopicExporter do
 
   before do
     STDOUT.stubs(:write)
@@ -13,7 +12,7 @@ describe ImportExport::TopicExporter do
   fab!(:topic) { Fabricate(:topic, user: user) }
   fab!(:post) { Fabricate(:post, topic: topic, user: user) }
 
-  context '.perform' do
+  describe '.perform' do
     it 'export a single topic' do
       data = ImportExport::TopicExporter.new([topic.id]).perform.export_data
 

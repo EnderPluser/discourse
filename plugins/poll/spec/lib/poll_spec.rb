@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe DiscoursePoll::Poll do
+RSpec.describe DiscoursePoll::Poll do
   fab!(:user) { Fabricate(:user) }
   fab!(:user_2) { Fabricate(:user) }
 
@@ -127,6 +125,54 @@ describe DiscoursePoll::Poll do
         I18n.t("poll.min_vote_per_user", count: poll.min)
       )
     end
+
+    it 'should allow user to vote on a multiple poll even if min option is not configured' do
+      post_with_multiple_poll = Fabricate(:post, raw: <<~RAW)
+      [poll type=multiple max=3]
+      * 1
+      * 2
+      * 3
+      * 4
+      * 5
+      [/poll]
+      RAW
+
+      poll = post_with_multiple_poll.polls.first
+
+      DiscoursePoll::Poll.vote(
+        user,
+        post_with_multiple_poll.id,
+        "poll",
+        [poll.poll_options.first.digest]
+      )
+
+      expect(PollVote.where(poll: poll, user: user).pluck(:poll_option_id))
+        .to contain_exactly(poll.poll_options.first.id)
+    end
+
+    it 'should allow user to vote on a multiple poll even if max option is not configured' do
+      post_with_multiple_poll = Fabricate(:post, raw: <<~RAW)
+      [poll type=multiple min=1]
+      * 1
+      * 2
+      * 3
+      * 4
+      * 5
+      [/poll]
+      RAW
+
+      poll = post_with_multiple_poll.polls.first
+
+      DiscoursePoll::Poll.vote(
+        user,
+        post_with_multiple_poll.id,
+        "poll",
+        [poll.poll_options.first.digest, poll.poll_options.second.digest]
+      )
+
+      expect(PollVote.where(poll: poll, user: user).pluck(:poll_option_id))
+        .to contain_exactly(poll.poll_options.first.id, poll.poll_options.second.id)
+    end
   end
 
   describe "post_created" do
@@ -163,6 +209,39 @@ describe DiscoursePoll::Poll do
       end
 
       expect(messages.count).to eq(0)
+    end
+  end
+
+  describe '.extract' do
+    it "skips the polls inside quote" do
+      raw = <<~RAW
+      [quote="username, post:1, topic:2"]
+        [poll type=regular result=always]
+        * 1
+        * 2
+        [/poll]
+      [/quote]
+
+      [poll type=regular result=always]
+      * 3
+      * 4
+      [/poll]
+
+      Post with a poll and a quoted poll.
+      RAW
+
+      expect(DiscoursePoll::Poll.extract(raw, 2)).to contain_exactly({
+        "name" => "poll",
+        "options" => [{
+          "html" => "3",
+          "id" => "68b434ff88aeae7054e42cd05a4d9056"
+        }, {
+          "html" => "4",
+          "id" => "aa2393b424f2f395abb63bf785760a3b"
+        }],
+        "status" => "open",
+        "type" => "regular"
+      })
     end
   end
 end

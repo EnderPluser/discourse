@@ -1,4 +1,5 @@
-import { cancel, later, schedule } from "@ember/runloop";
+import { cancel, schedule } from "@ember/runloop";
+import discourseLater from "discourse-common/lib/later";
 import DiscourseRoute from "discourse/routes/discourse";
 import DiscourseURL from "discourse/lib/url";
 import { ID_CONSTRAINT } from "discourse/models/topic";
@@ -35,6 +36,10 @@ const TopicRoute = DiscourseRoute.extend({
   titleToken() {
     const model = this.modelFor("topic");
     if (model) {
+      if (model.get("errorHtml")) {
+        return model.get("errorTitle");
+      }
+
       const result = model.get("unicode_title") || model.get("title"),
         cat = model.get("category");
 
@@ -226,11 +231,11 @@ const TopicRoute = DiscourseRoute.extend({
 
       this.setProperties({
         lastScrollPos: parseInt($(document).scrollTop(), 10),
-        scheduledReplace: later(
+        scheduledReplace: discourseLater(
           this,
           "_replaceUnlessScrolling",
           postUrl,
-          Ember.Test ? 0 : SCROLL_DELAY
+          SCROLL_DELAY
         ),
       });
     }
@@ -246,10 +251,11 @@ const TopicRoute = DiscourseRoute.extend({
   },
 
   @action
-  willTransition() {
+  willTransition(transition) {
     this._super(...arguments);
     cancel(this.scheduledReplace);
     this.set("isTransitioning", true);
+    transition.catch(() => this.set("isTransitioning", false));
     return true;
   },
 
@@ -264,7 +270,7 @@ const TopicRoute = DiscourseRoute.extend({
 
     this.setProperties({
       lastScrollPos: currentPos,
-      scheduledReplace: later(
+      scheduledReplace: discourseLater(
         this,
         "_replaceUnlessScrolling",
         url,
@@ -275,7 +281,7 @@ const TopicRoute = DiscourseRoute.extend({
 
   setupParams(topic, params) {
     const postStream = topic.get("postStream");
-    postStream.set("summary", get(params, "filter") === "summary");
+    postStream.set("filter", get(params, "filter"));
 
     const usernames = get(params, "username_filters"),
       userFilters = postStream.get("userFilters");

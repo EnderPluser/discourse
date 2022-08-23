@@ -1,18 +1,14 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe AnonymousShadowCreator do
-
+RSpec.describe AnonymousShadowCreator do
   it "returns no shadow by default" do
     expect(AnonymousShadowCreator.get(Fabricate.build(:user))).to eq(nil)
   end
 
-  context "Anonymous posting is enabled" do
+  context "when anonymous posting is enabled" do
+    fab!(:user) { Fabricate(:user, trust_level: 3) }
 
     before { SiteSetting.allow_anonymous_posting = true }
-
-    fab!(:user) { Fabricate(:user, trust_level: 3) }
 
     it "returns no shadow if trust level is not met" do
       expect(AnonymousShadowCreator.get(Fabricate.build(:user, trust_level: 0))).to eq(nil)
@@ -78,6 +74,16 @@ describe AnonymousShadowCreator do
 
       expect { AnonymousShadowCreator.get(user) }.to_not raise_error
     end
-  end
 
+    it "falls back to username 'anonymous' if the translation for 'anonymous' consists entirely of disallowed characters" do
+      # use russian locale but do not allow russian characters:
+      I18n.locale = :ru
+      SiteSetting.unicode_usernames = true
+      SiteSetting.allowed_unicode_username_characters = "[äöü]"
+
+      shadow = AnonymousShadowCreator.get(user)
+
+      expect(shadow.username).to eq("anonymous")
+    end
+  end
 end

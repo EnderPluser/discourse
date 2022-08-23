@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe "Discobot welcome post" do
+RSpec.describe "Discobot welcome post" do
   let(:user) { Fabricate(:user) }
 
   before do
@@ -16,7 +14,7 @@ describe "Discobot welcome post" do
     end
   end
 
-  context 'When discourse_narrative_bot_welcome_post_delay is greater than 0' do
+  context 'when discourse_narrative_bot_welcome_post_delay is greater than 0' do
     before do
       SiteSetting.discourse_narrative_bot_welcome_post_delay = 5
     end

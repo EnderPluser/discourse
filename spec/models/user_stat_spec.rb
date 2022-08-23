@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe UserStat do
-
+RSpec.describe UserStat do
   it "is created automatically when a user is created" do
     user = Fabricate(:evil_trout)
     expect(user.user_stat).to be_present
@@ -12,12 +9,11 @@ describe UserStat do
     expect(user.user_stat.new_since).to be_present
   end
 
-  context '#update_view_counts' do
-
+  describe '#update_view_counts' do
     let(:user) { Fabricate(:user) }
     let(:stat) { user.user_stat }
 
-    context 'topics_entered' do
+    context 'with topics_entered' do
       context 'without any views' do
         it "doesn't increase the user's topics_entered" do
           expect { UserStat.update_view_counts; stat.reload }.not_to change(stat, :topics_entered)
@@ -44,11 +40,10 @@ describe UserStat do
           stat.reload
           expect(stat.topics_entered).to eq(1)
         end
-
       end
     end
 
-    context 'posts_read_count' do
+    context 'with posts_read_count' do
       context 'without any post timings' do
         it "doesn't increase the user's posts_read_count" do
           expect { UserStat.update_view_counts; stat.reload }.not_to change(stat, :posts_read_count)
@@ -90,6 +85,8 @@ describe UserStat do
     end
 
     it 'updates first unread pm timestamp correctly' do
+      freeze_time
+
       user = Fabricate(:user, last_seen_at: Time.zone.now)
       user_2 = Fabricate(:user, last_seen_at: Time.zone.now)
       pm_topic = Fabricate(:private_message_topic, user: user, recipient: user_2)

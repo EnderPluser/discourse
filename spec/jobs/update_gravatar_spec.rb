@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Jobs::UpdateGravatar do
+RSpec.describe Jobs::UpdateGravatar do
   fab!(:user) { Fabricate(:user) }
   let(:temp) { Tempfile.new('test') }
   fab!(:upload) { Fabricate(:upload, user: user) }
@@ -41,7 +39,7 @@ describe Jobs::UpdateGravatar do
     SiteSetting.automatically_download_gravatars = true
 
     expect { user.refresh_avatar }
-      .to change { Jobs::UpdateGravatar.jobs.count }.by(0)
+      .not_to change { Jobs::UpdateGravatar.jobs.count }
     user.reload
 
     expect(user.uploaded_avatar_id).to eq(nil)

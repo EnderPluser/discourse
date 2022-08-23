@@ -5,7 +5,6 @@ require 'net/imap'
 class Group < ActiveRecord::Base
   # TODO(2021-05-26): remove
   self.ignored_columns = %w{
-    automatic_membership_retroactive
     flair_url
   }
 
@@ -36,6 +35,8 @@ class Group < ActiveRecord::Base
   has_many :associated_groups, through: :group_associated_groups, dependent: :destroy
 
   belongs_to :flair_upload, class_name: 'Upload'
+  has_many :upload_references, as: :target, dependent: :destroy
+
   belongs_to :smtp_updated_by, class_name: 'User'
   belongs_to :imap_updated_by, class_name: 'User'
 
@@ -50,6 +51,12 @@ class Group < ActiveRecord::Base
 
   after_save :enqueue_update_mentions_job,
     if: Proc.new { |g| g.name_before_last_save && g.saved_change_to_name? }
+
+  after_save do
+    if saved_change_to_flair_upload_id?
+      UploadReference.ensure_exist!(upload_ids: [self.flair_upload_id], target: self)
+    end
+  end
 
   after_save :expire_cache
   after_destroy :expire_cache
@@ -96,6 +103,9 @@ class Group < ActiveRecord::Base
   AUTO_GROUP_IDS = Hash[*AUTO_GROUPS.to_a.flatten.reverse]
   STAFF_GROUPS = [:admins, :moderators, :staff]
 
+  AUTO_GROUPS_ADD = "add"
+  AUTO_GROUPS_REMOVE = "remove"
+
   IMAP_SETTING_ATTRIBUTES = [
     "imap_server",
     "imap_port",
@@ -110,7 +120,8 @@ class Group < ActiveRecord::Base
     "imap_port",
     "imap_ssl",
     "email_username",
-    "email_password"
+    "email_password",
+    "email_from_alias"
   ]
 
   ALIAS_LEVELS = {
@@ -138,9 +149,12 @@ class Group < ActiveRecord::Base
   validates :messageable_level, inclusion: { in: ALIAS_LEVELS.values }
 
   scope :with_imap_configured, -> { where(imap_enabled: true).where.not(imap_mailbox_name: '') }
+  scope :with_smtp_configured, -> { where(smtp_enabled: true) }
 
   scope :visible_groups, Proc.new { |user, order, opts|
-    groups = self.order(order || "name ASC")
+    groups = self
+    groups = groups.order(order) if order
+    groups = groups.order("groups.name ASC") unless order&.include?("name")
 
     if !opts || !opts[:include_everyone]
       groups = groups.where("groups.id > 0")
@@ -287,6 +301,10 @@ class Group < ActiveRecord::Base
     else
       [ALIAS_LEVELS[:everyone]]
     end
+  end
+
+  def smtp_from_address
+    self.email_from_alias.present? ? self.email_from_alias : self.email_username
   end
 
   def downcase_incoming_email
@@ -467,12 +485,20 @@ class Group < ActiveRecord::Base
         "SELECT id FROM users WHERE id <= 0 OR trust_level < #{id - 10} OR staged"
       end
 
-    DB.exec <<-SQL
+    removed_user_ids = DB.query_single <<-SQL
       DELETE FROM group_users
             USING (#{remove_subquery}) X
             WHERE group_id = #{group.id}
               AND user_id = X.id
+      RETURNING group_users.user_id
     SQL
+
+    if removed_user_ids.present?
+      Jobs.enqueue(
+        :publish_group_membership_updates,
+        user_ids: removed_user_ids, group_id: group.id, type: AUTO_GROUPS_REMOVE
+      )
+    end
 
     # Add people to groups
     insert_subquery =
@@ -489,15 +515,23 @@ class Group < ActiveRecord::Base
         "SELECT id FROM users WHERE id > 0 AND NOT staged"
       end
 
-    DB.exec <<-SQL
+    added_user_ids = DB.query_single <<-SQL
       INSERT INTO group_users (group_id, user_id, created_at, updated_at)
            SELECT #{group.id}, X.id, now(), now()
              FROM group_users
        RIGHT JOIN (#{insert_subquery}) X ON X.id = user_id AND group_id = #{group.id}
             WHERE user_id IS NULL
+       RETURNING group_users.user_id
     SQL
 
     group.save!
+
+    if added_user_ids.present?
+      Jobs.enqueue(
+        :publish_group_membership_updates,
+        user_ids: added_user_ids, group_id: group.id, type: AUTO_GROUPS_ADD
+      )
+    end
 
     # we want to ensure consistency
     Group.reset_counters(group.id, :group_users)
@@ -554,12 +588,24 @@ class Group < ActiveRecord::Base
     lookup_group(name) || refresh_automatic_group!(name)
   end
 
-  def self.search_groups(name, groups: nil, custom_scope: {})
+  def self.search_groups(name, groups: nil, custom_scope: {}, sort: :none)
     groups ||= Group
 
-    groups.where(
+    relation = groups.where(
       "name ILIKE :term_like OR full_name ILIKE :term_like", term_like: "%#{name}%"
     )
+
+    if sort == :auto
+      prefix = "#{name.gsub("_", "\\_")}%"
+      relation = relation.reorder(
+        DB.sql_fragment(
+          "CASE WHEN name ILIKE :like OR full_name ILIKE :like THEN 0 ELSE 1 END ASC, name ASC",
+          like: prefix
+        )
+      )
+    end
+
+    relation
   end
 
   def self.lookup_group(name)
@@ -604,7 +650,7 @@ class Group < ActiveRecord::Base
       if group = find_by(id: id)
         unless GroupUser.where(group_id: id, user_id: user_id).exists?
           group_user = group.group_users.create!(user_id: user_id)
-          DiscourseEvent.trigger(:user_added_to_group, group_user.user, group, automatic: true)
+          group.trigger_user_added_event(group_user.user, true)
         end
       else
         name = AUTO_GROUP_IDS[trust_level]
@@ -677,7 +723,7 @@ class Group < ActiveRecord::Base
       Discourse.request_refresh!(user_ids: [user.id])
     end
 
-    DiscourseEvent.trigger(:user_added_to_group, user, self, automatic: automatic)
+    trigger_user_added_event(user, automatic)
 
     self
   end
@@ -689,12 +735,20 @@ class Group < ActiveRecord::Base
     has_webhooks = WebHook.active_web_hooks(:group_user)
     payload = WebHook.generate_payload(:group_user, group_user, WebHookGroupUserSerializer) if has_webhooks
     group_user.destroy
-    DiscourseEvent.trigger(:user_removed_from_group, user, self)
+    trigger_user_removed_event(user)
     WebHook.enqueue_hooks(:group_user, :user_removed_from_group,
       id: group_user.id,
       payload: payload
     ) if has_webhooks
     true
+  end
+
+  def trigger_user_added_event(user, automatic)
+    DiscourseEvent.trigger(:user_added_to_group, user, self, automatic: automatic)
+  end
+
+  def trigger_user_removed_event(user)
+    DiscourseEvent.trigger(:user_removed_from_group, user, self)
   end
 
   def add_owner(user)
@@ -707,7 +761,9 @@ class Group < ActiveRecord::Base
 
   def self.find_by_email(email)
     self.where(
-      "email_username = :email OR string_to_array(incoming_email, '|') @> ARRAY[:email]",
+      "email_username = :email OR
+        string_to_array(incoming_email, '|') @> ARRAY[:email] OR
+        email_from_alias = :email",
       email: Email.downcase(email)
     ).first
   end
@@ -914,6 +970,10 @@ class Group < ActiveRecord::Base
   def message_count
     return 0 unless self.has_messages
     TopicAllowedGroup.where(group_id: self.id).joins(:topic).count
+  end
+
+  def full_url
+    "#{Discourse.base_url}/g/#{UrlHelper.encode_component(self.name)}"
   end
 
   protected
@@ -1127,6 +1187,7 @@ end
 #  imap_enabled                       :boolean          default(FALSE)
 #  imap_updated_at                    :datetime
 #  imap_updated_by_id                 :integer
+#  email_from_alias                   :string
 #
 # Indexes
 #

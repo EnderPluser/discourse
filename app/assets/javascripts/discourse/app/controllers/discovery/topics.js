@@ -11,18 +11,25 @@ import { endWith } from "discourse/lib/computed";
 import { routeAction } from "discourse/helpers/route-action";
 import { inject as service } from "@ember/service";
 import { userPath } from "discourse/lib/url";
+import { action } from "@ember/object";
 
 const controllerOpts = {
   discovery: controller(),
-  discoveryTopics: controller("discovery/topics"),
   router: service(),
 
   period: null,
   canCreateTopicOnCategory: null,
 
   canStar: alias("currentUser.id"),
-  showTopicPostBadges: not("discoveryTopics.new"),
+  showTopicPostBadges: not("new"),
   redirectedReason: alias("currentUser.redirected_to_top.reason"),
+
+  @discourseComputed("model.filter", "site.show_welcome_topic_banner")
+  showEditWelcomeTopicBanner(filter, showWelcomeTopicBanner) {
+    return (
+      this.currentUser?.staff && filter === "latest" && showWelcomeTopicBanner
+    );
+  },
 
   expandGloballyPinned: false,
   expandAllPinned: false,
@@ -31,6 +38,20 @@ const controllerOpts = {
   ascending: readOnly("model.params.ascending"),
 
   selected: null,
+
+  // Remove these actions which are defined in `DiscoveryController`
+  // We want them to bubble in DiscoveryTopicsController
+  @action
+  loadingBegan() {
+    this.set("application.showFooter", false);
+    return true;
+  },
+
+  @action
+  loadingComplete() {
+    this.set("application.showFooter", this.loadedAllItems);
+    return true;
+  },
 
   @discourseComputed("model.filter", "model.topics.length")
   showDismissRead(filter, topicsLength) {

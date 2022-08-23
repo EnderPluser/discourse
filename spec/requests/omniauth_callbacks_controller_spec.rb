@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-require 'single_sign_on'
+require 'discourse_connect_base'
 
 RSpec.describe Users::OmniauthCallbacksController do
   fab!(:user) { Fabricate(:user) }
@@ -80,7 +79,7 @@ RSpec.describe Users::OmniauthCallbacksController do
     end
   end
 
-  context 'Google Oauth2' do
+  describe 'Google Oauth2' do
     before do
       SiteSetting.enable_google_oauth2_logins = true
     end
@@ -155,6 +154,44 @@ RSpec.describe Users::OmniauthCallbacksController do
           get "/auth/google_oauth2"
           expect(response.status).to eq(302)
         end
+      end
+    end
+
+    context "when in readonly mode" do
+      use_redis_snapshotting
+
+      it "should return a 503" do
+        Discourse.enable_readonly_mode
+
+        get "/auth/google_oauth2/callback"
+        expect(response.code).to eq("503")
+      end
+    end
+
+    context "when in staff writes only mode" do
+      use_redis_snapshotting
+
+      before do
+        Discourse.enable_readonly_mode(Discourse::STAFF_WRITES_ONLY_MODE_KEY)
+      end
+
+      it "returns a 503 for non-staff" do
+        mock_auth(user.email, user.username, user.name)
+        get "/auth/google_oauth2/callback.json"
+        expect(response.status).to eq(503)
+        logged_on_user = Discourse.current_user_provider.new(request.env).current_user
+
+        expect(logged_on_user).to eq(nil)
+      end
+
+      it "completes for staff" do
+        user.update!(admin: true)
+        mock_auth(user.email, user.username, user.name)
+        get "/auth/google_oauth2/callback.json"
+        expect(response.status).to eq(302)
+        logged_on_user = Discourse.current_user_provider.new(request.env).current_user
+
+        expect(logged_on_user).not_to eq(nil)
       end
     end
 
@@ -239,6 +276,45 @@ RSpec.describe Users::OmniauthCallbacksController do
         get "/auth/google_oauth2/callback.json"
         data = JSON.parse(cookies[:authentication_data])
         expect(data["associate_url"]).to eq(nil)
+      end
+
+      it 'does not use email for username suggestions if disabled in settings' do
+        SiteSetting.use_email_for_username_and_name_suggestions = false
+        username = ""
+        name = ""
+        email = "billmailbox@test.com"
+        mock_auth(email, username, name)
+
+        get "/auth/google_oauth2/callback.json"
+        data = JSON.parse(cookies[:authentication_data])
+
+        expect(data["username"]).to eq("user1") # not "billmailbox" that can be extracted from email
+      end
+
+      it 'uses email for username suggestions if enabled in settings' do
+        SiteSetting.use_email_for_username_and_name_suggestions = true
+        username = ""
+        name = ""
+        email = "billmailbox@test.com"
+        mock_auth(email, username, name)
+
+        get "/auth/google_oauth2/callback.json"
+        data = JSON.parse(cookies[:authentication_data])
+
+        expect(data["username"]).to eq("billmailbox")
+      end
+
+      it 'stops using name for username suggestions if disabled in settings' do
+        SiteSetting.use_name_for_username_suggestions = false
+        username = ""
+        name = "John Smith"
+        email = "billmailbox@test.com"
+        mock_auth(email, username, name)
+
+        get "/auth/google_oauth2/callback.json"
+        data = JSON.parse(cookies[:authentication_data])
+
+        expect(data["username"]).to eq("user1")
       end
 
       describe 'when site is invite_only' do
@@ -411,7 +487,21 @@ RSpec.describe Users::OmniauthCallbacksController do
         expect(user.confirm_password?("securepassword")).to eq(false)
       end
 
-      it "should update name/username/email when sso_overrides is enabled" do
+      it "should work if the user has no email_tokens, and an invite" do
+        # Confirming existing email_tokens has a side effect of redeeming invites.
+        # Pretend we don't have any email_tokens
+        user.email_tokens.destroy_all
+
+        invite = Fabricate(:invite, invited_by: Fabricate(:admin))
+        invite.update_column(:email, user.email) # (avoid validation)
+
+        get "/auth/google_oauth2/callback.json"
+        expect(response.status).to eq(302)
+
+        expect(invite.reload.invalidated_at).not_to eq(nil)
+      end
+
+      it "should update name/username/email when SiteSetting.auth_overrides_* are enabled" do
         SiteSetting.email_editable = false
         SiteSetting.auth_overrides_email = true
         SiteSetting.auth_overrides_name = true
@@ -543,7 +633,7 @@ RSpec.describe Users::OmniauthCallbacksController do
           SiteSetting.enable_discourse_connect_provider = true
           SiteSetting.discourse_connect_secret = "topsecret"
 
-          @sso = SingleSignOn.new
+          @sso = DiscourseConnectBase.new
           @sso.nonce = "mynonce"
           @sso.sso_secret = SiteSetting.discourse_connect_secret
           @sso.return_sso_url = "http://somewhere.over.rainbow/sso"
@@ -695,7 +785,7 @@ RSpec.describe Users::OmniauthCallbacksController do
         expect(data["username"]).to eq(fixed_username)
       end
 
-      context "groups are enabled" do
+      context "when groups are enabled" do
         let(:strategy_class) { Auth::OmniAuthStrategies::DiscourseGoogleOauth2 }
         let(:groups_url) { "#{strategy_class::GROUPS_DOMAIN}#{strategy_class::GROUPS_PATH}" }
         let(:groups_scope) { strategy_class::DEFAULT_SCOPE + strategy_class::GROUPS_SCOPE }
@@ -916,6 +1006,9 @@ RSpec.describe Users::OmniauthCallbacksController do
       end
 
       it "should use username of the staged user if username in payload is the same" do
+        # it's important to check this, because we had regressions
+        # when usernames were changed to the same username with "1" added at the end
+
         mock_auth(staged_user.email, staged_user.username)
 
         get "/auth/google_oauth2/callback.json"

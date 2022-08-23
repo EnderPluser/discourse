@@ -1,4 +1,5 @@
-import { cancel, later } from "@ember/runloop";
+import { cancel } from "@ember/runloop";
+import discourseLater from "discourse-common/lib/later";
 import { caretPosition, setCaretPosition } from "discourse/lib/utilities";
 import { INPUT_DELAY } from "discourse-common/config/environment";
 import Site from "discourse/models/site";
@@ -113,7 +114,7 @@ export default function (options) {
   let inputSelectedItems = [];
 
   function handlePaste() {
-    later(() => me.trigger("keydown"), 50);
+    discourseLater(() => me.trigger("keydown"), 50);
   }
 
   function closeAutocomplete() {
@@ -201,17 +202,22 @@ export default function (options) {
 
         if (term) {
           let text = me.val();
+
           text =
             text.substring(0, completeStart) +
             (options.preserveKey ? options.key || "" : "") +
             term +
             " " +
             text.substring(completeEnd + 1, text.length);
+
           me.val(text);
+
           let newCaretPos = completeStart + 1 + term.length;
+
           if (options.key) {
             newCaretPos++;
           }
+
           setCaretPosition(me[0], newCaretPos);
 
           if (options && options.afterComplete) {
@@ -477,7 +483,7 @@ export default function (options) {
   }
 
   function performAutocomplete(e) {
-    if ([keys.esc, keys.enter].indexOf(e.which) !== -1) {
+    if ([keys.esc, keys.enter].includes(e.which)) {
       return true;
     }
 
@@ -487,6 +493,7 @@ export default function (options) {
     if (options.key) {
       if (options.onKeyUp && key !== options.key) {
         let match = options.onKeyUp(me.val(), cp);
+
         if (match) {
           completeStart = cp - match[0].length;
           completeEnd = completeStart + match[0].length - 1;
@@ -525,7 +532,7 @@ export default function (options) {
       // saves us wiring up a change event as well
 
       cancel(inputTimeout);
-      inputTimeout = later(function () {
+      inputTimeout = discourseLater(function () {
         if (inputSelectedItems.length === 0) {
           inputSelectedItems.push("");
         }
@@ -543,26 +550,36 @@ export default function (options) {
     if (!options.key) {
       completeStart = 0;
     }
+
     if (e.which === keys.shift) {
       return;
     }
+
     if (completeStart === null && e.which === keys.backSpace && options.key) {
       c = caretPosition(me[0]);
       c -= 1;
       initial = c;
       prevIsGood = true;
+
       while (prevIsGood && c >= 0) {
         c -= 1;
         prev = me[0].value[c];
         stopFound = prev === options.key;
+
         if (stopFound) {
           prev = me[0].value[c - 1];
+
           if (
             checkTriggerRule({ backSpace: true }) &&
             (!prev || allowedLettersRegex.test(prev))
           ) {
             completeStart = c;
             term = me[0].value.substring(c + 1, initial);
+
+            if (!completeEnd) {
+              completeEnd = c + term.length;
+            }
+
             updateAutoComplete(dataSource(term, options));
             return true;
           }
@@ -640,11 +657,12 @@ export default function (options) {
           return false;
         case keys.backSpace:
           autocompleteOptions = null;
-          completeEnd = cp;
           cp--;
+          completeEnd = cp;
 
           if (cp < 0) {
             closeAutocomplete();
+
             if (isInput) {
               i = wrap.find("a:last");
               if (i) {

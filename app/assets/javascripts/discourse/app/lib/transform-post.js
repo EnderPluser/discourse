@@ -18,7 +18,7 @@ export function transformBasicPost(post) {
     deleted: post.get("deleted"),
     deleted_at: post.deleted_at,
     user_deleted: post.user_deleted,
-    isDeleted: post.deleted_at || post.user_deleted, // xxxxx
+    isDeleted: post.deleted_at || post.user_deleted,
     deletedByAvatarTemplate: null,
     deletedByUsername: null,
     primary_group_name: post.primary_group_name,
@@ -74,6 +74,7 @@ export function transformBasicPost(post) {
     actionsSummary: null,
     read: post.read,
     replyToUsername: null,
+    replyToName: null,
     replyToAvatarTemplate: null,
     reply_to_post_number: post.reply_to_post_number,
     cooked_hidden: !!post.cooked_hidden,
@@ -84,6 +85,7 @@ export function transformBasicPost(post) {
     readCount: post.readers_count,
     canPublishPage: false,
     trustLevel: post.trust_level,
+    userSuspended: post.user_suspended,
   };
 
   _additionalAttributes.forEach((a) => (postAtts[a] = post[a]));
@@ -176,7 +178,7 @@ export default function transformPost(
   }
 
   const showTopicMap =
-    _additionalAttributes.indexOf("topicMap") !== -1 ||
+    _additionalAttributes.includes("topicMap") ||
     showPMMap ||
     (post.post_number === 1 &&
       topic.archetype === "regular" &&
@@ -227,6 +229,7 @@ export default function transformPost(
   const replyToUser = post.get("reply_to_user");
   if (replyToUser) {
     postAtts.replyToUsername = replyToUser.username;
+    postAtts.replyToName = replyToUser.name;
     postAtts.replyToAvatarTemplate = replyToUser.avatar_template;
   }
 
@@ -254,10 +257,11 @@ export default function transformPost(
     postAtts.canToggleLike = likeAction.get("canToggle");
     postAtts.showLike = postAtts.liked || postAtts.canToggleLike;
     postAtts.likeCount = likeAction.count;
-  }
-
-  if (!currentUser) {
-    postAtts.showLike = !topic.archived;
+  } else if (
+    !currentUser ||
+    (topic.archived && topic.user_id !== currentUser.id)
+  ) {
+    postAtts.showLike = true;
   }
 
   if (postAtts.post_number === 1) {
@@ -284,6 +288,10 @@ export default function transformPost(
       (currentUser.staff || !post.user_deleted);
     postAtts.canPermanentlyDelete =
       postAtts.isDeleted && post.can_permanently_delete;
+  }
+
+  if (post.user_status) {
+    postAtts.userStatus = post.user_status;
   }
 
   _additionalAttributes.forEach((a) => (postAtts[a] = post[a]));

@@ -5,7 +5,7 @@ import { Promise } from "rsvp";
 import Site from "discourse/models/site";
 import User from "discourse/models/user";
 import { formatUsername } from "discourse/lib/utilities";
-import { later } from "@ember/runloop";
+import discourseLater from "discourse-common/lib/later";
 
 let primaryTab = false;
 let liveEnabled = false;
@@ -18,6 +18,14 @@ const idleThresholdTime = 1000 * 10; // 10 seconds
 
 const context = "discourse_desktop_notifications_";
 const keyValueStore = new KeyValueStore(context);
+
+let desktopNotificationHandlers = [];
+export function registerDesktopNotificationHandler(handler) {
+  desktopNotificationHandlers.push(handler);
+}
+export function clearDesktopNotificationHandlers() {
+  desktopNotificationHandlers = [];
+}
 
 // Called from an initializer
 function init(messageBus, appEvents) {
@@ -86,7 +94,7 @@ function confirmNotification(siteSettings) {
   const clickEventHandler = () => notification.close();
 
   notification.addEventListener("click", clickEventHandler);
-  later(() => {
+  discourseLater(() => {
     notification.close();
     notification.removeEventListener("click", clickEventHandler);
   }, 10 * 1000);
@@ -176,11 +184,14 @@ function onNotification(data, siteSettings, user) {
       icon: notificationIcon,
       tag: notificationTag,
     });
-
     notification.onclick = () => {
       DiscourseURL.routeTo(data.post_url);
       notification.close();
     };
+
+    desktopNotificationHandlers.forEach((handler) =>
+      handler(data, siteSettings, user)
+    );
   });
 }
 

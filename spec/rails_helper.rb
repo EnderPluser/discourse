@@ -13,22 +13,16 @@ if ENV['COVERAGE']
 end
 
 require 'rubygems'
-require 'rbtrace'
-
+require 'rbtrace' if RUBY_ENGINE == "ruby"
 require 'pry'
 require 'pry-byebug'
 require 'pry-rails'
-
-# Loading more in this block will cause your tests to run faster. However,
-# if you change any configuration or code from libraries loaded here, you'll
-# need to restart spork for it take effect.
 require 'fabrication'
 require 'mocha/api'
 require 'certified'
 require 'webmock/rspec'
 
 class RspecErrorTracker
-
   def self.last_exception=(ex)
     @ex = ex
   end
@@ -105,22 +99,13 @@ ENV['DISCOURSE_DEV_ALLOW_ANON_TO_IMPERSONATE'] = '1'
 module TestSetup
   # This is run before each test and before each before_all block
   def self.test_setup(x = nil)
-    # TODO not sure about this, we could use a mock redis implementation here:
-    #   this gives us really clean "flush" semantics, however the side-effect is that
-    #   we are no longer using a clean redis implementation, a preferable solution may
-    #   be simply flushing before tests, trouble is that redis may be reused with dev
-    #   so that would mean the dev would act weird
-    #
-    #   perf benefit seems low (shaves 20 secs off a 4 minute test suite)
-    #
-    # Discourse.redis = DiscourseMockRedis.new
-
     RateLimiter.disable
     PostActionNotifier.disable
     SearchIndexer.disable
     UserActionManager.disable
     NotificationEmailer.disable
     SiteIconManager.disable
+    WordWatcher.disable_cache
 
     SiteSetting.provider.all.each do |setting|
       SiteSetting.remove_override!(setting.name)
@@ -154,6 +139,11 @@ module TestSetup
 
     # Don't queue badge grant in test mode
     BadgeGranter.disable_queue
+
+    # Make sure the default Post and Topic bookmarkables are registered
+    Bookmark.reset_bookmarkables
+
+    OmniAuth.config.test_mode = false
   end
 end
 
@@ -208,6 +198,8 @@ RSpec.configure do |config|
   config.infer_base_class_for_anonymous_controllers = true
 
   config.before(:suite) do
+    CachedCounting.disable
+
     begin
       ActiveRecord::Migration.check_pending!
     rescue ActiveRecord::PendingMigrationError
@@ -251,16 +243,6 @@ RSpec.configure do |config|
     def initialize
       super
       self.current_site = "test"
-    end
-  end
-
-  class DiscourseMockRedis < MockRedis
-    def without_namespace
-      self
-    end
-
-    def delete_prefixed(prefix)
-      keys("#{prefix}*").each { |k| del(k) }
     end
   end
 
@@ -423,7 +405,7 @@ end
 
 def file_from_fixtures(filename, directory = "images")
   SpecSecureRandom.value ||= SecureRandom.hex
-  FileUtils.mkdir_p(file_from_fixtures_tmp_folder) unless Dir.exists?(file_from_fixtures_tmp_folder)
+  FileUtils.mkdir_p(file_from_fixtures_tmp_folder) unless Dir.exist?(file_from_fixtures_tmp_folder)
   tmp_file_path = File.join(file_from_fixtures_tmp_folder, SecureRandom.hex << filename)
   FileUtils.cp("#{Rails.root}/spec/fixtures/#{directory}/#{filename}", tmp_file_path)
   File.new(tmp_file_path)
@@ -448,25 +430,11 @@ ensure
   STDOUT.unstub(:write)
 end
 
-class TrackingLogger < ::Logger
-  attr_reader :messages
-  def initialize(level: nil)
-    super(nil)
-    @messages = []
-    @level = level
-  end
-  def add(*args, &block)
-    if !level || args[0].to_i >= level
-      @messages << args
-    end
-  end
-end
-
-def track_log_messages(level: nil)
+def track_log_messages
   old_logger = Rails.logger
-  logger = Rails.logger = TrackingLogger.new(level: level)
-  yield logger.messages
-  logger.messages
+  logger = Rails.logger = FakeLogger.new
+  yield logger
+  logger
 ensure
   Rails.logger = old_logger
 end
@@ -492,21 +460,23 @@ def create_request_env(path: nil)
   env
 end
 
-def create_auth_cookie(token:, user_id: nil, trust_level: nil, issued_at: Time.zone.now)
-  request = ActionDispatch::Request.new(create_request_env)
+def create_auth_cookie(token:, user_id: nil, trust_level: nil, issued_at: Time.current)
   data = {
     token: token,
     user_id: user_id,
     trust_level: trust_level,
     issued_at: issued_at.to_i
   }
-  cookie = request.cookie_jar.encrypted["_t"] = { value: data }
-  cookie[:value]
+  jar = ActionDispatch::Cookies::CookieJar.build(ActionDispatch::TestRequest.create, {})
+  jar.encrypted[:_t] = { value: data }
+  CGI.escape(jar[:_t])
 end
 
 def decrypt_auth_cookie(cookie)
-  request = ActionDispatch::Request.new(create_request_env.merge("HTTP_COOKIE" => "_t=#{cookie}"))
-  request.cookie_jar.encrypted["_t"]
+  ActionDispatch::Cookies::CookieJar
+    .build(ActionDispatch::TestRequest.create, { _t: cookie })
+    .encrypted[:_t]
+    .with_indifferent_access
 end
 
 class SpecSecureRandom

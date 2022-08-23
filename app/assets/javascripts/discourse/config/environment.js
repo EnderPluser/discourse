@@ -5,7 +5,7 @@ module.exports = function (environment) {
     modulePrefix: "discourse",
     environment,
     rootURL: process.env.DISCOURSE_RELATIVE_URL_ROOT || "/",
-    locationType: "auto",
+    locationType: "history",
     historySupportMiddleware: false,
     EmberENV: {
       FEATURES: {
@@ -16,7 +16,10 @@ module.exports = function (environment) {
         // Prevent Ember Data from overriding Date.parse.
         Date: false,
       },
+      // This is easier to toggle than the flag in ember-cli-deprecation-workflow.
+      RAISE_ON_DEPRECATION: false,
     },
+    exportApplicationGlobal: true,
 
     APP: {
       // Here you can pass flags/options to your application instance
@@ -30,6 +33,7 @@ module.exports = function (environment) {
     // ENV.APP.LOG_TRANSITIONS = true;
     // ENV.APP.LOG_TRANSITIONS_INTERNAL = true;
     // ENV.APP.LOG_VIEW_LOOKUPS = true;
+    ENV.EmberENV.RAISE_ON_DEPRECATION = false;
   }
 
   if (environment === "test") {
@@ -42,6 +46,8 @@ module.exports = function (environment) {
 
     ENV.APP.rootElement = "#ember-testing";
     ENV.APP.autoboot = false;
+
+    ENV.EmberENV.RAISE_ON_DEPRECATION = false;
   }
 
   if (environment === "production") {

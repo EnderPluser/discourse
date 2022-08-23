@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe ReviewableUserSerializer do
+RSpec.describe ReviewableUserSerializer do
 
   let(:user) { Fabricate(:user) }
   let(:admin) { Fabricate(:admin) }

@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe Onebox::Engine::GithubCommitOnebox do
+RSpec.describe Onebox::Engine::GithubCommitOnebox do
   describe "regular commit url" do
     before do
       @link = "https://github.com/discourse/discourse/commit/803d023e2307309f8b776ab3b8b7e38ba91c0919"
@@ -11,7 +9,7 @@ describe Onebox::Engine::GithubCommitOnebox do
       stub_request(:get, @uri).to_return(status: 200, body: onebox_response("githubcommit"))
     end
 
-    include_context "engines"
+    include_context "with engines"
     it_behaves_like "an engine"
 
     describe "#to_html" do
@@ -40,7 +38,7 @@ describe Onebox::Engine::GithubCommitOnebox do
       end
 
       it "includes commit time and date" do
-        expect(html).to include("02:03AM - 02 Aug 13")
+        expect(html).to include("02:16AM - 02 Aug 13 UTC")
       end
 
       it "includes number of files changed" do
@@ -66,7 +64,7 @@ describe Onebox::Engine::GithubCommitOnebox do
         .to_return(status: 200, body: onebox_response("githubcommit"))
     end
 
-    include_context "engines"
+    include_context "with engines"
     # TODO: fix test to make sure it's not failing when matching object
     # it_behaves_like "an engine"
 
@@ -96,7 +94,7 @@ describe Onebox::Engine::GithubCommitOnebox do
       end
 
       it "includes commit time and date" do
-        expect(html).to include("02:03AM - 02 Aug 13")
+        expect(html).to include("02:16AM - 02 Aug 13 UTC")
       end
 
       it "includes number of files changed" do

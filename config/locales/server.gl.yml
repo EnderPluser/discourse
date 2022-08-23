@@ -219,7 +219,6 @@ gl:
       <p>Se lembra o seu contrasinal, pode<a href="%{base_url}/login">iniciar sesión</a></p>
 
       <p>Se non, <a href="%{base_url}/password-reset">restableza o contrasinal</a></p>
-    user_exists: "Non necesita invitar a <b>%{email}</b>, pois <a href='%{base_path}/u/%{username}/summary'>xa teñen unha conta!</a>"
     confirm_email: "<p>Xa case está! Enviámoslle un correo de activación ao seu enderezo electrónico. Siga as instrucións para activar a súa conta.</p><p>Se non lle chegan, comprobe o cartafol de correo lixo.</p>"
     cant_invite_to_group: "Non ten permisos para convidar a usuarios a grupo(s) específico(s). Asegúrese de ser o propietario do(s) grupo(s) a que está tentando convidar."
     disabled_errors:
@@ -317,8 +316,6 @@ gl:
   too_many_links:
     one: "Sentímolo, mais os novos usuarios só poden poñer unha ligazón nunha publicación."
     other: "Sentímolo, mais os novos usuarios só poden poñer %{count} ligazóns nunha publicación."
-  contains_blocked_word: "A súa publicación contén unha palabra que non está permitida: %{word}"
-  contains_blocked_words: "A súa publicación contén varias palabras que non están permitidas: %{words}"
   spamming_host: "Sentímolo, non pode publicar unha ligazón a ese servidor."
   user_is_suspended: "Aos usuarios suspendidos non se lles permite publicar."
   topic_not_found: "Algo foi mal. Talvez este tema se pechou ou se eliminou mentres o estaba a consultar?"
@@ -374,7 +371,6 @@ gl:
       already_bookmarked_post: "Non pode gardar a mesma publicación nos marcadores dúas veces."
       cannot_set_past_reminder: "Non pode estabelecer un recordatorio de marcador no pasado."
       cannot_set_reminder_in_distant_future: "Non pode estabelecer un recordatorio de marcador máis de 10 anos cara ao futuro."
-      time_must_be_provided: "débese facilitar o período para todos os recordatorios"
     reminders:
       at_desktop: "A vindeira vez que estea no meu ordenador"
       later_today: "Hoxe, máis tarde"
@@ -847,13 +843,6 @@ gl:
   draft_backup:
     pm_title: "Borradores de seguranza procedentes de temas en curso"
     pm_body: "O tema contén borradores de seguranza"
-  user_activity:
-    no_bookmarks:
-      self: "Non ten publicacións engadidas aos marcadores; os marcadores permítenlle volver rapidamente a publicacións específicas."
-      search: "Non se atoparon marcadores coa busca fornecida."
-      others: "Sen marcadores."
-    no_drafts:
-      self: "Non ten borradores; comece a responder en calquera tema e gardarase automaticamente como un novo borrador."
   webauthn:
     validation:
       invalid_type_error: "O provedor tipo webauthn facilitado non é válido. Os tipos válidos son webauthn.get e webauthn.create."
@@ -1339,7 +1328,6 @@ gl:
     min_personal_message_title_length: "Extensión mínima do título dunha mensaxe en número de caracteres"
     max_emojis_in_title: "Número máximo de emojis permitido no título dun tema"
     min_search_term_length: "Extensión mínima dunha busca válida en número de caracteres"
-    search_tokenize_chinese_japanese_korean: "Forzar a busca para tokenizar chinés/xaponés/coreano incluso en sitios que non sexan CXC"
     search_prefer_recent_posts: "Se a busca no foro é lenta, esta opción proba primeiro nun índice das publicacións máis recentes"
     search_recent_posts_size: "Número de publicacións recentes que se manteñen no índice"
     log_search_queries: "Rexistro de buscas realizadas polos usuarios"
@@ -1356,7 +1344,6 @@ gl:
     site_description: "Describa o sitio nunha única frase, utilizada na etiqueta metadescrición."
     short_site_description: "Descrición curta, utilizada como o título da etiqueta na páxina principal."
     crawl_images: "Recuperar imaxes desde URL remotos para inserilas coas dimensións correctas de largura e altura."
-    download_remote_images_to_local: "Converter imaxes remotas en locais ao descargalas; isto prevén que haxa imaxes rotas."
     download_remote_images_threshold: "Espazo mínimo que cómpre no disco para descargar imaxes remotas de forma local (en porcentaxe)"
     disabled_image_download_domains: "As imaxes remotas procedentes destes dominios non serán descargadas. Listaxe delimitada por barras verticais."
     editing_grace_period: "Durante (n) segundos despois de publicar, pódese editar sen chegar a crear unha nova versión no historial."
@@ -1379,7 +1366,6 @@ gl:
     show_pinned_excerpt_mobile: "Mostrar o extracto de temas pegados na vista móbil."
     show_pinned_excerpt_desktop: "Mostrar o extracto de temas pegados na vista de escritorio."
     post_onebox_maxlength: "Lonxitude máxima en caracteres dunha publicación de Discourse en formato caixa (onebox)."
-    blocked_onebox_domains: "Unha listaxe de dominios que nunca se mostrarán en formato onebox."
     allowed_inline_onebox_domains: "Unha listaxe de dominios que se mostrarán en formato onebox en miniatura se son ligados sen un título"
     enable_inline_onebox_on_all_domains: "Ignorar o axuste do sitio inline_onebox_domain_whitelist e permitir incluír onebox en todos os dominios."
     force_custom_user_agent_hosts: "Hosts que se utilizarán para o axente de usuario personalizado de onebox en todas as solicitudes (especialmente útil para hosts que limitan o acceso por axente de usuario)."
@@ -1398,7 +1384,6 @@ gl:
     favicon: "Unha favicona para o seu sitio, mire <a href='https://en.wikipedia.org/wiki/Favicon' target='_blank'>https://en.wikipedia.org/wiki/Favicon</a>. Para funcionar correctamente sobre un CDN debe ser PNG. Redimensionarase automaticamente a 32x32. Se se deixa en branco, utilizarase large_icon."
     apple_touch_icon: "Icona utilizada para dispositivos Apple. Redimensionarase automaticamente a 180x180. Se se deixa en branco, utilizarase large_icon."
     opengraph_image: "Imaxe de gráfico aberto predeterminada que se utiliza cando a páxina non ten ningunha outra imaxe adecuada"
-    twitter_summary_large_image: "A «imaxe grande de resumo» da tarxeta de Twitter (debe ter polo menos 280 de largura e 150 de altura). Se se deixa en branco, xeraranse metadatos de tarxetas normais utilizando opengraph_image."
     notification_email: "O enderezo electrónico remitente utilizado ao enviar todos os correos electrónicos esenciais do sistema. O dominio especificado debe ter correctamente configurados os rexistros SPF, DKIM e PTR inversos para que os correos electrónicos se reciban correctamente."
     email_custom_headers: "Unha listaxe de cabeceiras de correo personalizadas separadas por barras verticais"
     email_subject: "Formato de asunto personalizábel para correos electrónicos estándar. Véxase <a href='https://meta.discourse.org/t/customize-subject-format-for-standard-emails/20801' target='_blank'>https://meta.discourse.org/t/customize-subject-format-for-standard-emails/20801</a>"
@@ -1411,10 +1396,8 @@ gl:
     summary_percent_filter: "Cando un usuario preme en «Resumir este tema» mostrar a porcentaxe de publicacións destacadas"
     summary_max_results: "Número máximo de publicacións que devolve a opción «Resumir este tema»"
     enable_system_message_replies: "Permitirlles aos usuarios responder mensaxes do sistema, mesmo aínda que as mensaxes persoais estean desactivadas"
-    enable_long_polling: "O bus de mensaxes utilizado para a notificación pode utilizar «long polling»"
     enable_chunked_encoding: "Active as respostas mediante codificación fragmentaria do servidor. Esta funcionalidade serve na maioría das configuracións, pero algúns servidores intermedios poden retelas, o que provocaría o atraso nas respostas"
     long_polling_base_url: "URL base empregado para o «long polling» (cando unha rede de distribución de contido serve contido dinámico, asegúrese de axustalo como «origin pull»); por exemplo: http://origin.site.com"
-    long_polling_interval: "Tempo que o servidor debe de esperar antes de responderlles aos clientes que non hai datos para enviar (soamente usuarios con sesión iniciada)."
     polling_interval: "Se non se utilizar «long polling», con que frecuencia -en milisegundos- deben iniciar sesión os clientes"
     anon_polling_interval: "Con que frecuencia -en milisegundos- deberían recoller mostras os clientes anónimos"
     background_polling_interval: "Con que frecuencia -en milisegundos- deberían recoller mostras os clientes (se a xanela está en segundo plano)"
@@ -1449,7 +1432,6 @@ gl:
     ga_universal_auto_link_domains: "Active o seguimento entre dominios de Google Universal Analytics. As ligazóns de saída a estes dominios engadirán o id do cliente. Consulte a <a href='https://support.google.com/analytics/answer/1034342?hl=en' target='_blank'>Guía de seguimento entre dominios de Google.</a>"
     gtm_container_id: "Id do contedor de Google Tag Manager. Por exemplo: GTM-ABCDEF. <br/>Nota: pode ser que teñan que estar listados os scripts de terceiros cargados con GTM na «pantalla de script da política de seguridade de contido\"."
     enable_escaped_fragments: "Ir á API Ajax-Crawling de Google se non se detecta ningún rastrexador web. Véxase <a href='https://developers.google.com/webmasters/ajax-crawling/docs/learn-more' target='_blank'>https://developers.google.com/webmasters/ajax-crawling/docs/learn-more</a>"
-    moderators_manage_categories_and_groups: "Permitir que os moderadores administren categorías e grupos"
     cors_origins: "Orixes permitidas para as solicitudes de orixe cruzada (CORS). Cada orixe debe incluír http:// ou https://. A variábel env DISCOURSE_ENABLE_CORS débese estabelecer como verdadeira para activar CORS."
     use_admin_ip_allowlist: "Os administradores só poden iniciar sesión se están nun enderezo IP definido na listaxe de enderezos IP revisados (Administración > Rexistros > IP revisados)."
     blocked_ip_blocks: "Unha listaxe de bloques IP privados que Discourse nunca debería rastrexar"
@@ -1476,7 +1458,6 @@ gl:
     send_tl2_promotion_message: "Envíe unha nova mensaxe aos usuarios de nivel 2 de confianza sobre a promoción."
     suppress_reply_directly_below: "Non mostrar o contador de respostas despregable cando hai unha única resposta xusto embaixo desta publicación."
     suppress_reply_directly_above: "Non mostrar o despregable en-resposta-a nunha publicación se unicamente hai unha resposta xusto enriba dela."
-    remove_full_quote: "Retirar automaticamente citas completas nas respostas directas."
     suppress_reply_when_quoting: "Non mostrar o despregable en-resposta-a nunha publicación cando esta cite a resposta."
     max_reply_history: "Número máximo de respostas que se mostran ao expandir en-resposta-a"
     topics_per_period_in_top_summary: "Número de temas destacados que se mostran no resumo de temas destacados."
@@ -1494,7 +1475,6 @@ gl:
     blocked_email_domains: "Unha listaxe dominios de correo electrónico separados por barras verticais cos cales os usuarios non poden rexistrar contas. Exemplo: mailinator.com | trashmail.net"
     allowed_email_domains: "Unha listaxe de dominios de correo electrónico separados por barras verticais cos que os usuarios DEBEN rexistrar contas. AVISO: Non se permitirán usuarios con dominios de correo electrónico distintos aos da listaxe!"
     auto_approve_email_domains: "Os usuarios con enderezos electrónicos desta listaxe de dominios serán aprobados automaticamente."
-    hide_email_address_taken: "Non informar aos usuarios da existencia dunha conta cun correo electrónico determinado durante o rexistro e desde o formulario de contrasinal esquecido."
     log_out_strict: "Ao pechar a sesión, pechar TODAS as sesións en todos os dispositivos do usuario"
     version_checks: "Faga ping ao Discourse Hub para obter actualizacións de versións e amose mensaxes de nova versión no panel de control do<a href='%{base_path}/admin' target='_blank'>/admin</a>"
     new_version_emails: "Enviar un correo electrónico a contact_email address cando haxa dispoñible unha nova versión de Discourse."
@@ -1610,7 +1590,6 @@ gl:
     external_emoji_url: "URL do servizo externo de imaxes emoticonas. Déixeo en branco para desactivalo."
     use_site_small_logo_as_system_avatar: "Utilice o pequeno logotipo do sitio no canto do avatar de usuario do sistema. Require que estea presente o logotipo."
     restrict_letter_avatar_colors: "Unha listaxe de valores hexadecimais das cores permitidas para os fondos dos avatares de letras."
-    selectable_avatars_enabled: "Obrigar os usuarios a elixiren un avatar da listaxe."
     selectable_avatars: "Listaxe de avatares que os usuarios poden elixir."
     allow_all_attachments_for_group_messages: "Permitir todos os ficheiros anexos para mensaxes de grupo."
     png_to_jpg_quality: "Calidade do ficheiro JPG convertido (1 é calidade mínima; 99 é a mellor; 100 para desactivar)"
@@ -1867,7 +1846,6 @@ gl:
     display_name_on_posts: "Mostrar o nome completo de usuario nas súas publicacións, ademais do seu @nomedeusuario."
     show_time_gap_days: "Se hai dúas publicacións separadas por moitos días, amosar a fenda temporal no tema."
     short_progress_text_threshold: "Despois de que o número de publicacións nun tema supere este número, a barra de progreso só amosará o número de publicación actual. Se cambia o largo da barra de progreso, pode que precise cambiar este valor."
-    default_code_lang: "O realzado predeterminado da sintaxe da linguaxe de programación aplicado aos bloques de código GitHub (auto, nohighlight, ruby, python etc.)"
     warn_reviving_old_topic_age: "Cando alguén comeza a responder a un tema onde a última resposta é máis antiga que uns días, amosará un aviso. Desactívase estabelecendo en 0."
     autohighlight_all_code: "Forza a aplicación do resaltado de código en todos os bloques de código preformatados, mesmo aínda que non se especificase a linguaxe de xeito explícito."
     highlighted_languages: "Regras de realzado de sintaxe incluídas. (Aviso: incluír demasiadas linguaxes pode afectar o rendemento) véxase: <a href='https://highlightjs.org/static/demo/' target='_blank'>https://highlightjs.org/static/demo</a> para unha demostración"
@@ -1939,7 +1917,7 @@ gl:
     default_categories_tracking: "Listase de categorías que se seguen por defecto."
     default_categories_muted: "Listaxe de categorías que están silenciadas por defecto."
     default_categories_watching_first_post: "Listaxe de categorías en que se verá por defecto a primeira publicación de cada novo tema."
-    default_categories_regular: "Lista de categorías que non están silenciadas de modo predeterminado. Útil cando o axuste do sitio `mute_all_categories_by_default` está activada."
+    default_categories_normal: "Lista de categorías que non están silenciadas de modo predeterminado. Útil cando o axuste do sitio `mute_all_categories_by_default` está activada."
     mute_all_categories_by_default: "Estableza o nivel de notificación predeterminado de todas as categorías como silenciado. Requírelles aos usuarios que opten por categorías para que aparezan nas páxinas «últimas» e «categorías». Se desexa modificar os valores predeterminados para usuarios anónimos, configure os axustes «default_categories_»."
     default_tags_watching: "Listaxe de etiquetas que se vixían por defecto."
     default_tags_tracking: "Listaxe de etiquetas seguidas por defecto."
@@ -1965,7 +1943,6 @@ gl:
     tags_sort_alphabetically: "Mostrar etiquetas en orde alfabética. Por defecto móstranse segundo a súa popularidade."
     tags_listed_by_group: "Listar etiquetas por grupos de etiquetas na <a href='%{base_path}/tags' target='_blank'>páxina de etiquetas</a>."
     tag_style: "Estilo visual para as insignias das etiquetas."
-    allow_staff_to_tag_pms: "Permitir que os membros do equipo etiqueten calquera mensaxe persoal"
     min_trust_level_to_tag_topics: "O nivel de confianza mínimo requirido para etiquetar temas"
     suppress_overlapping_tags_in_list: "Se unha etiqueta coincide con palabras exactas do título dun tema, non se mostrará"
     remove_muted_tags_from_latest: "Non mostrar na listaxe de temas máis recentes aqueles etiquetados unicamente con etiquetas silenciadas."
@@ -2250,13 +2227,6 @@ gl:
     email_in_spam_header: "O primeiro correo electrónico do usuario marcouse como correo lixo"
     already_silenced: "O usuario xa foi silenciado por %{staff} %{time_ago}."
     already_suspended: "O usuario xa foi suspendido por %{staff} %{time_ago}."
-  reviewables_reminder:
-    submitted:
-      one: "Hai elementos enviados desde hai máis de %{count} hora. [Revíseos](%{base_path}/review)."
-      other: "Hai elementos enviados desde hai máis de %{count} horas. [Revíseos](%{base_path}/review)."
-    subject_template:
-      one: "%{count} elemento precisa ser revisado"
-      other: "%{count} elementos precisan ser revisados"
   unsubscribe_mailer:
     title: "Anular a subscrición ao servizo de correo"
     subject_template: "Confirme que xa non quere recibir actualizacións por correo electrónico de %{site_title}"
@@ -2517,12 +2487,6 @@ gl:
         [preferencias]: %{user_preferences_url}
     tl2_promotion_message:
       subject_template: "Parabéns pola súa promoción a un novo nivel de confianza!"
-      text_body_template: |
-        Promocionámolo a outro [nivel de confianza](https://blog.discourse.org/2018/06/understanding-discourse-trust-levels/)!
-
-        Como usuario experimentado, debería valorar [esta listaxe de consellos e trucos](https://blog.discourse.org/2016/12/discourse-new-user-tips-and-tricks/).
-
-        Animámolo a que siga participando. Gústanos telo por aquí.
     backup_succeeded:
       title: "Copia de seguranza feita correctamente"
       subject_template: "A copia de seguranza completouse correctamente"
@@ -3370,23 +3334,12 @@ gl:
     suspicious_login:
       title: "Alerta de novo inicio de sesión"
       subject_template: "[%{site_name}] Novo inicio de sesión desde %{location}"
-      text_body_template: |
-        Ola,
-
-        Detectamos un inicio de sesión desde un dispositivo ou localización que non adoita utilizar. Foi vostede?
-
-         - Localización: %{location} (%{client_ip})
-         - Navegador: %{browser}
-         - Dispositivo: %{device} – %{os}
-
-        Se foi vostede, perfecto! Non ten que facer máis nada.
-
-        Se non o foi, [revise a súa sesión actual](%{base_url}/my/preferences/account) e valore cambiar o de contrasinal.
     post_approved:
       title: "A súa publicación foi aprobada"
   page_forbidden:
     title: "Oopa! Esta páxina é privada."
   page_not_found:
+    page_title: "Páxina non atopada"
     title: "Oopa! Esta páxina non existe ou é privada."
     popular_topics: "Destacados"
     recent_topics: "Recentes"
@@ -4038,88 +3991,30 @@ gl:
       message: "<p>Volvémoslle enviar o correo de activación a <b>%{email}</b>"
   safe_mode:
     title: "Entrar en modo seguro"
-    description: "O modo seguro permítelle probar o seu sitio sen cargar complementos nin outras personalizacións."
-    no_customizations: "Desactivar tema actual"
-    only_official: "Desactivar complementos non oficiais"
+    no_unofficial_plugins: "Desactivar complementos non oficiais"
     no_plugins: "Desactivar todos os complementos"
     enter: "Entrar en modo seguro"
     must_select: "Debe seleccionar polo menos unha opción para entrar no modo seguro."
   wizard:
     title: "Configuración de Discourse"
     step:
-      locale:
-        title: "Dámoslle a benvida ao seu Discourse!"
-        fields:
-          default_locale:
-            description: "Cal é o idioma predefinido da súa comunidade?"
-      forum_title:
-        title: "Nome"
-        description: "O nome é un sinal visible a distancia, o <i>primeiro</i> que os visitantes potenciais saberán sobre a súa comunidade. Que di o nome e o título da súa comunidade sobre ela?"
+      introduction:
         fields:
           title:
-            label: "O nome da súa comunidade"
             placeholder: "Reunión de Helena"
           site_description:
             placeholder: "Un lugar para que Helena e as súas amizades discutan sobre cousas interesantes"
-          short_site_description:
-            placeholder: "A mellor comunidade do mundo"
-      introduction:
-        title: "Introdución"
-        disabled: "<p>Non atopamos tema ningún co título “%{topic_title}”.</p> <ul> <li>Se cambiou o título, edite ese tema para cambiar tamén o texto introdutorio do seu foro. </li> <li>Se eliminou este tema, cree outro co título “%{topic_title}”. O contido da primeira publicación será o texto introdutorio do seu foro.</li> </ul>"
-        fields:
-          welcome:
-            label: "Tema de benvida"
-            description: "<p>Como lle describiría nun minuto a súa comunidade a alguén que non a coñece?</p> <ul> <li>A quen se dirixen os debates?</li> <li>Que podo atopar aquí?</li> <li>Por que debería visitala?</li> </ul> <p>O seu tema de benvida é o primeiro que os seus visitantes lerán. Pense nel como no seu argumento de vendas <b>nun minuto</b> ou a súa declaración de intencións. </p>"
-            one_paragraph: "Limite a súa mensaxe de benvida a un único parágrafo."
-            extra_description: "Se non está seguro, pode saltar este paso e editar o seu texto de benvida máis tarde."
+          default_locale:
+            label: "Idioma"
       privacy:
-        title: "Acceso"
-        description: "<p>A súa comunidade é aberta a todo o mundo ou está restrinxida só aos seus membros afiliados, con invitación ou aprobación? Se o prefire, pode facer que inicialmente sexa privada e despois convertela en aberta.</p>"
         fields:
-          privacy:
-            choices:
-              open:
-                label: "Pública"
-                description: "Calquera pode acceder á comunidade"
-              restricted:
-                label: "Privada"
-                description: "Só os usuarios rexistrados poden acceder á comunidade"
-          privacy_options:
-            description: "Como poden crear unha conta os novos usuarios?"
-            choices:
-              open:
-                label: "Os usuarios poden rexistrarse pola súa conta."
-              invite_only:
-                label: "Os usuarios deben ser convidados por usuarios de confianza ou do equipo para poder rexistrarse."
-              must_approve:
-                label: "Os usuarios poden rexistrarse pola súa conta, pero deben ser aprobados polo equipo."
-      contact:
-        title: "Contacto"
-        fields:
-          contact_email:
-            label: "Correo electrónico"
-            placeholder: "nome@exemplo.com"
-            description: "Enderezo electrónico da persoa ou grupo responsable desta comunidade. Utilízase para notificacións moi importantes como denuncias sen atender, actualizacións de seguridade e tamén aparecerá na súa <a href='%{base_path}/about' target='_blank'>páxina Acerca de</a> para comunicar cuestións urxentes."
-          contact_url:
-            label: "Páxina web"
-            placeholder: "https://www.exemplo.com/contactanos"
-            description: "Páxina de contacto xeral con vostede ou a súa organización. Amosarase na súa <a href='%{base_path}/about' target='_blank'>páxina Acerca de</a>."
-          site_contact:
-            label: "Mensaxes automáticas"
-            description: "Todas as mensaxes privadas automáticas de Discourse serán enviadas deste este usuario, sexan advertencias de denuncias sexan apoios recibidos."
-      corporate:
-        title: "Organización"
-        description: "Esta información inserirase nos seus <a href='%{base_path}/tos' target='blank'>Termos de servizo</a>, que poderá editar en calquera momento na sección Equipo. Se non ten unha empresa, pode omitir este paso por agora."
-        fields:
-          company_name:
-            label: "Nome da empresa"
-            placeholder: "Organización de exemplo"
-          governing_law:
-            label: "Lei que rexe"
-            placeholder: "Lei de California"
-          city_for_disputes:
-            label: "Cidade para disputas"
-            placeholder: "San Francisco, California"
+          login_required:
+            placeholder: "Privada"
+            extra_description: "Só os usuarios rexistrados poden acceder á comunidade"
+          must_approve_users:
+            placeholder: "Requirir aprobación"
+      ready:
+        title: "O seu Discourse está listo!"
       styling:
         fields:
           body_font:
@@ -4140,28 +4035,34 @@ gl:
                 label: "Categorías e últimos temas"
               categories_and_top_topics:
                 label: "Categorías e temas destacados"
-              categories_boxes:
-                label: "Caixas de categorías"
-              categories_boxes_with_topics:
-                label: "Caixas de categorías con temas"
-      logos:
-        title: "Logotipos"
+      branding:
         fields:
           logo:
             label: "Logotipo principal"
-            description: "A imaxe do logotipo na parte superior esquerda do sitio. Utilice unha imaxe larga e rectangular, cunha altura de 120 e unha proporción de aspecto maior de 3:1"
           logo_small:
             label: "Logotipo cadrado"
-            description: "Unha versión cadrada do seu logotipo. Móstrase na parte superior esquerda do seu sitio cando se despraza cara a abaixo no navegador e cando se comparte en plataformas sociais. Idealmente debe ser máis grande que 512x512."
-      icons:
-        title: "Iconas"
-        fields:
           favicon:
             label: "Icona do navegador"
-            description: "Imaxe de icona que se usa para representar o seu sitio en navegadores web que se ve ben a tamaños pequenos. As extensións recomendadas son PNG ou JPG. Utilizaremos o logotipo cadrado por defecto."
           large_icon:
             label: "Icona grande"
-            description: "Imaxe de icona utilizada para representar o seu sitio en dispositivos modernos que se ve ben en tamaños máis grandes. Idealmente debe ser maior que 512 × 512. Utilizaremos o logo cadrado por defecto."
+      corporate:
+        fields:
+          company_name:
+            label: "Nome da empresa"
+            placeholder: "Organización de exemplo"
+          governing_law:
+            label: "Lei que rexe"
+            placeholder: "Lei de California"
+          contact_url:
+            label: "Páxina web"
+            placeholder: "https://www.exemplo.com/contactanos"
+            description: "Páxina de contacto xeral con vostede ou a súa organización. Amosarase na súa <a href='%{base_path}/about' target='_blank'>páxina Acerca de</a>."
+          city_for_disputes:
+            label: "Cidade para disputas"
+            placeholder: "San Francisco, California"
+          site_contact:
+            label: "Mensaxes automáticas"
+            description: "Todas as mensaxes privadas automáticas de Discourse serán enviadas deste este usuario, sexan advertencias de denuncias sexan apoios recibidos."
       invites:
         title: "Convidar o equipo"
         description: "Xa case está! Imos convidar outras persoas para axudar a<a href='https://blog.discourse.org/2014/08/building-a-discourse-community/' target='blank'>iniciar discusións</a> con temas e respostas de interese para que comece a súa comunidade."

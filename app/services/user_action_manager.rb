@@ -11,7 +11,7 @@ class UserActionManager
   end
 
   [:notification, :post, :topic, :post_action].each do |type|
-    self.class_eval(<<~METHODS)
+    self.class_eval(<<~RUBY)
       def self.#{type}_created(*args)
         return if @disabled
         #{type}_rows(*args).each { |row| UserAction.log_action!(row) }
@@ -20,7 +20,7 @@ class UserActionManager
         return if @disabled
         #{type}_rows(*args).each { |row| UserAction.remove_action!(row) }
       end
-    METHODS
+    RUBY
   end
 
 private
@@ -110,7 +110,6 @@ private
   end
 
   def self.post_action_rows(post_action)
-    action = UserAction::BOOKMARK if post_action.is_bookmark?
     action = UserAction::LIKE if post_action.is_like?
     return [] unless action
 

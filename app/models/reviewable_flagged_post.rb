@@ -321,7 +321,7 @@ private
     Jobs.enqueue(
       :send_system_message,
       user_id: post.user_id,
-      message_type: :flags_disagreed,
+      message_type: "flags_disagreed",
       message_options: {
         flagged_post_raw_content: post.raw,
         url: post.url
@@ -357,6 +357,7 @@ end
 #
 # Indexes
 #
+#  idx_reviewables_score_desc_created_at_desc                  (score,created_at)
 #  index_reviewables_on_reviewable_by_group_id                 (reviewable_by_group_id)
 #  index_reviewables_on_status_and_created_at                  (status,created_at)
 #  index_reviewables_on_status_and_score                       (status,score)

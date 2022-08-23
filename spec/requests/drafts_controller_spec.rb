@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe DraftsController do
+RSpec.describe DraftsController do
   describe "#index" do
     it 'requires you to be logged in' do
       get "/drafts.json"

@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
-require "rails_helper"
 require "import_export"
 
-describe ImportExport::CategoryExporter do
+RSpec.describe ImportExport::CategoryExporter do
 
   fab!(:category) { Fabricate(:category) }
   fab!(:group) { Fabricate(:group) }
@@ -15,7 +14,7 @@ describe ImportExport::CategoryExporter do
     STDOUT.stubs(:write)
   end
 
-  context '.perform' do
+  describe '.perform' do
     it 'export the category when it is found' do
       data = ImportExport::CategoryExporter.new([category.id]).perform.export_data
 

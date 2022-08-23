@@ -1,11 +1,9 @@
 # encoding: UTF-8
 # frozen_string_literal: true
 
-require 'rails_helper'
-
 # TODO - test pinning, create_moderator_post
 
-describe TopicStatusUpdater do
+RSpec.describe TopicStatusUpdater do
 
   fab!(:user) { Fabricate(:user) }
   fab!(:admin) { Fabricate(:admin) }

@@ -144,6 +144,7 @@ $avatar_margin: -50px; // negative margin makes avatars extend above cards
     }
     .user-card-avatar {
       margin-top: $avatar_margin;
+      max-height: $avatar_width;
     }
     .new-user a {
       color: var(--primary-low-mid);
@@ -297,5 +298,22 @@ $avatar_margin: -50px; // negative margin makes avatars extend above cards
         overflow: hidden;
       }
     }
+  }
+}
+
+h3.user-status {
+  display: flex;
+
+  img.emoji {
+    margin-bottom: 1px;
+    margin-right: 0.3em;
+  }
+
+  .relative-date {
+    text-align: left;
+    font-size: var(--font-down-3);
+    padding-top: 0.5em;
+    margin-left: 0.6em;
+    color: var(--primary-medium);
   }
 }

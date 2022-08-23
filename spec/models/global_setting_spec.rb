@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
 require 'tempfile'
 
 class GlobalSetting
@@ -9,7 +8,7 @@ class GlobalSetting
   end
 end
 
-describe GlobalSetting do
+RSpec.describe GlobalSetting do
 
   describe '.use_s3_assets?' do
     it 'returns false by default' do
@@ -92,7 +91,7 @@ describe GlobalSetting do
   end
 end
 
-describe GlobalSetting::EnvProvider do
+RSpec.describe GlobalSetting::EnvProvider do
   it "can detect keys from env" do
     ENV['DISCOURSE_BLA'] = '1'
     ENV['DISCOURSE_BLA_2'] = '2'
@@ -101,7 +100,7 @@ describe GlobalSetting::EnvProvider do
   end
 end
 
-describe GlobalSetting::FileProvider do
+RSpec.describe GlobalSetting::FileProvider do
   it "can parse a simple file" do
     f = Tempfile.new('foo')
     f.write("  # this is a comment\n")

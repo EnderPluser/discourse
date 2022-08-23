@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
 RSpec.describe Jobs::GroupSmtpEmail do
   fab!(:topic) { Fabricate(:private_message_topic, title: "Help I need support") }
   fab!(:post) do
@@ -255,7 +253,7 @@ RSpec.describe Jobs::GroupSmtpEmail do
     end
   end
 
-  context "group is deleted" do
+  context "when group is deleted" do
     it "returns without sending email" do
       group.destroy
       subject.execute(args)

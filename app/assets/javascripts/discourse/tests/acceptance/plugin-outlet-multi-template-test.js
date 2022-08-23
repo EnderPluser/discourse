@@ -1,10 +1,10 @@
 import {
   acceptance,
   count,
-  queryAll,
+  query,
 } from "discourse/tests/helpers/qunit-helpers";
 import { clearCache } from "discourse/lib/plugin-connectors";
-import hbs from "htmlbars-inline-precompile";
+import { hbs } from "ember-cli-htmlbars";
 import { test } from "qunit";
 import { visit } from "@ember/test-helpers";
 
@@ -15,12 +15,16 @@ const GOODBYE =
 acceptance("Plugin Outlet - Multi Template", function (needs) {
   needs.hooks.beforeEach(() => {
     clearCache();
+    // eslint-disable-next-line no-undef
     Ember.TEMPLATES[HELLO] = hbs`<span class='hello-span'>Hello</span>`;
+    // eslint-disable-next-line no-undef
     Ember.TEMPLATES[GOODBYE] = hbs`<span class='bye-span'>Goodbye</span>`;
   });
 
   needs.hooks.afterEach(() => {
+    // eslint-disable-next-line no-undef
     delete Ember.TEMPLATES[HELLO];
+    // eslint-disable-next-line no-undef
     delete Ember.TEMPLATES[GOODBYE];
     clearCache();
   });
@@ -38,12 +42,12 @@ acceptance("Plugin Outlet - Multi Template", function (needs) {
       "it has class names"
     );
     assert.strictEqual(
-      queryAll(".hello-span").text(),
+      query(".hello-span").innerText,
       "Hello",
       "it renders into the outlet"
     );
     assert.strictEqual(
-      queryAll(".bye-span").text(),
+      query(".bye-span").innerText,
       "Goodbye",
       "it renders into the outlet"
     );

@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Jobs::NotifyMovedPosts do
+RSpec.describe Jobs::NotifyMovedPosts do
 
   it "raises an error without post_ids" do
     expect { Jobs::NotifyMovedPosts.new.execute(moved_by_id: 1234) }.to raise_error(Discourse::InvalidParameters)

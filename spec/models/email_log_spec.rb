@@ -1,16 +1,13 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe EmailLog do
-
+RSpec.describe EmailLog do
   it { is_expected.to belong_to :user }
   it { is_expected.to validate_presence_of :to_address }
   it { is_expected.to validate_presence_of :email_type }
 
   fab!(:user) { Fabricate(:user) }
 
-  context 'unique email per post' do
+  describe 'unique email per post' do
     it 'only allows through one email per post' do
       post = Fabricate(:post)
       user = post.user
@@ -37,7 +34,7 @@ describe EmailLog do
     end
   end
 
-  context 'after_create' do
+  describe 'after_create' do
     context 'with user' do
       it 'updates the last_emailed_at value for the user' do
         expect {
@@ -159,6 +156,25 @@ describe EmailLog do
 
     it "returns nothing if no emails match" do
       expect(EmailLog.addressed_to_user(user).count).to eq(0)
+    end
+  end
+
+  describe "bounce_error_code fix before update" do
+    fab!(:email_log) { Fabricate(:email_log) }
+
+    it "makes sure the bounce_error_code is in the format X.X.X or XXX" do
+      email_log.update!(bounce_error_code: "5.1.1")
+      expect(email_log.reload.bounce_error_code).to eq("5.1.1")
+      email_log.update!(bounce_error_code: "5.2.23")
+      expect(email_log.reload.bounce_error_code).to eq("5.2.23")
+      email_log.update!(bounce_error_code: "5.0.0 (permanent failure)")
+      expect(email_log.reload.bounce_error_code).to eq("5.0.0")
+      email_log.update!(bounce_error_code: "422")
+      expect(email_log.reload.bounce_error_code).to eq("422")
+      email_log.update!(bounce_error_code: "5.2")
+      expect(email_log.reload.bounce_error_code).to eq(nil)
+      email_log.update!(bounce_error_code: "blah")
+      expect(email_log.reload.bounce_error_code).to eq(nil)
     end
   end
 end

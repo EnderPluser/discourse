@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe "RequestTracker in multisite", type: :multisite do
+RSpec.describe "RequestTracker in multisite", type: :multisite do
   before do
     global_setting :skip_per_ip_rate_limit_trust_level, 2
 
@@ -112,7 +110,7 @@ describe "RequestTracker in multisite", type: :multisite do
     end
   end
 
-  context "10 seconds limiter" do
+  context "with a 10 seconds limiter" do
     before do
       global_setting :max_reqs_per_ip_per_10_seconds, 1
     end
@@ -121,7 +119,7 @@ describe "RequestTracker in multisite", type: :multisite do
     include_examples "user id rate limiters behavior", "id_10_secs_limit"
   end
 
-  context "60 seconds limiter" do
+  context "with a 60 seconds limiter" do
     before do
       global_setting :max_reqs_per_ip_per_minute, 1
     end
@@ -130,7 +128,7 @@ describe "RequestTracker in multisite", type: :multisite do
     include_examples "user id rate limiters behavior", "id_60_secs_limit"
   end
 
-  context "assets 10 seconds limiter" do
+  context "with assets 10 seconds limiter" do
     before do
       global_setting :max_asset_reqs_per_ip_per_10_seconds, 1
     end

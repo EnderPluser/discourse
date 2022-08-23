@@ -12,7 +12,7 @@ import { setOwner } from "@ember/application";
 import { isTesting } from "discourse-common/config/environment";
 
 const rewrites = [];
-export const TOPIC_URL_REGEXP = /\/t\/([^\/]+)\/(\d+)\/?(\d+)?/;
+export const TOPIC_URL_REGEXP = /\/t\/([^\/]*[^\d\/][^\/]*)\/(\d+)\/?(\d+)?/;
 
 // We can add links here that have server side responses but not client side.
 const SERVER_SIDE_ONLY = [
@@ -24,7 +24,6 @@ const SERVER_SIDE_ONLY = [
   /^\/raw\//,
   /^\/posts\/\d+\/raw/,
   /^\/raw\/\d+/,
-  /^\/wizard/,
   /\.rss$/,
   /\.json$/,
   /^\/admin\/upgrade$/,
@@ -45,7 +44,7 @@ export function rewritePath(path) {
 
   let result = params[0];
   rewrites.forEach((rw) => {
-    if ((rw.opts.exceptions || []).some((ex) => path.indexOf(ex) === 0)) {
+    if ((rw.opts.exceptions || []).some((ex) => path.startsWith(ex))) {
       return;
     }
     result = result.replace(rw.regexp, rw.replacement);
@@ -72,7 +71,7 @@ export function groupPath(subPath) {
 
 let _jumpScheduled = false;
 let _transitioning = false;
-let lockon = null;
+let lockOn = null;
 
 export function jumpToElement(elementId) {
   if (_jumpScheduled || isEmpty(elementId)) {
@@ -83,17 +82,17 @@ export function jumpToElement(elementId) {
   _jumpScheduled = true;
 
   schedule("afterRender", function () {
-    if (lockon) {
-      lockon.clearLock();
+    if (lockOn) {
+      lockOn.clearLock();
     }
 
-    lockon = new LockOn(selector, {
+    lockOn = new LockOn(selector, {
       finished() {
         _jumpScheduled = false;
-        lockon = null;
+        lockOn = null;
       },
     });
-    lockon.lock();
+    lockOn.lock();
   });
 }
 
@@ -143,20 +142,20 @@ const DiscourseURL = EmberObject.extend({
         holder = document.querySelector(selector);
       }
 
-      if (lockon) {
-        lockon.clearLock();
+      if (lockOn) {
+        lockOn.clearLock();
       }
 
-      lockon = new LockOn(selector, {
+      lockOn = new LockOn(selector, {
         originalTopOffset: opts.originalTopOffset,
         finished() {
           _transitioning = false;
-          lockon = null;
+          lockOn = null;
         },
       });
 
       if (holder && opts.skipIfOnScreen) {
-        const elementTop = lockon.elementTop();
+        const elementTop = lockOn.elementTop();
         const scrollTop = $(window).scrollTop();
         const windowHeight = $(window).height() - offsetCalculator();
         const height = $(holder).height();
@@ -170,30 +169,23 @@ const DiscourseURL = EmberObject.extend({
         }
       }
 
-      lockon.lock();
-      if (lockon.elementTop() < 1) {
+      lockOn.lock();
+      if (lockOn.elementTop() < 1) {
         _transitioning = false;
         return;
       }
     });
   },
 
-  // Browser aware replaceState. Will only be invoked if the browser supports it.
   replaceState(path) {
-    if (
-      window.history &&
-      window.history.pushState &&
-      window.history.replaceState &&
-      window.location.pathname !== path
-    ) {
+    if (this.router.currentURL !== path) {
       // Always use replaceState in the next runloop to prevent weird routes changing
       // while URLs are loading. For example, while a topic loads it sets `currentPost`
       // which triggers a replaceState even though the topic hasn't fully loaded yet!
       next(() => {
-        const location = this.get("router.location");
-        if (location && location.replaceURL) {
-          location.replaceURL(path);
-        }
+        // Using the private `_routerMicrolib` is not ideal, but Ember doesn't provide
+        // any other way for us to do `history.replaceState` without a full transition
+        this.router._routerMicrolib.replaceURL(path);
       });
     }
   },
@@ -249,13 +241,14 @@ const DiscourseURL = EmberObject.extend({
       return this.replaceState(path);
     }
 
-    const oldPath = `${window.location.pathname}${window.location.search}`;
+    const oldPath = this.router.currentURL;
+
     path = path.replace(/(https?\:)?\/\/[^\/]+/, "");
 
     // Rewrite /my/* urls
     let myPath = getURL("/my");
     const fullPath = getURL(path);
-    if (fullPath.indexOf(myPath) === 0) {
+    if (fullPath.startsWith(myPath)) {
       const currentUser = User.current();
       if (currentUser) {
         path = fullPath.replace(
@@ -268,7 +261,7 @@ const DiscourseURL = EmberObject.extend({
     }
 
     // handle prefixes
-    if (path.indexOf("/") === 0) {
+    if (path.startsWith("/")) {
       path = withoutPrefix(path);
     }
 
@@ -325,22 +318,22 @@ const DiscourseURL = EmberObject.extend({
   // Determines whether a URL is internal or not
   isInternal(url) {
     if (url && url.length) {
-      if (url.indexOf("//") === 0) {
+      if (url.startsWith("//")) {
         url = "http:" + url;
       }
-      if (url.indexOf("#") === 0) {
+      if (url.startsWith("#")) {
         return true;
       }
-      if (url.indexOf("/") === 0) {
+      if (url.startsWith("/")) {
         return true;
       }
-      if (url.indexOf(this.origin()) === 0) {
+      if (url.startsWith(this.origin())) {
         return true;
       }
-      if (url.replace(/^http/, "https").indexOf(this.origin()) === 0) {
+      if (url.replace(/^http/, "https").startsWith(this.origin())) {
         return true;
       }
-      if (url.replace(/^https/, "http").indexOf(this.origin()) === 0) {
+      if (url.replace(/^https/, "http").startsWith(this.origin())) {
         return true;
       }
     }
@@ -497,7 +490,7 @@ export function setURLContainer(container) {
 }
 
 export function prefixProtocol(url) {
-  return url.indexOf("://") === -1 && url.indexOf("mailto:") !== 0
+  return !url.includes("://") && !url.startsWith("mailto:")
     ? "https://" + url
     : url;
 }
@@ -507,7 +500,9 @@ export function getCategoryAndTagUrl(category, subcategories, tag) {
 
   if (category) {
     url = category.path;
-    if (!subcategories) {
+    if (subcategories && category.default_list_filter === "none") {
+      url += "/all";
+    } else if (!subcategories && category.default_list_filter === "all") {
       url += "/none";
     }
   }

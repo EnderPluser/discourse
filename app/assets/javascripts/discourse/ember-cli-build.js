@@ -7,12 +7,41 @@ const concat = require("broccoli-concat");
 const prettyTextEngine = require("./lib/pretty-text-engine");
 const { createI18nTree } = require("./lib/translation-plugin");
 const discourseScss = require("./lib/discourse-scss");
+const generateScriptsTree = require("./lib/scripts");
 const funnel = require("broccoli-funnel");
-const AssetRev = require("broccoli-asset-rev");
+
+const SILENCED_WARN_PREFIXES = [
+  "Setting the `jquery-integration` optional feature flag",
+  "The Ember Classic edition has been deprecated",
+  "Setting the `template-only-glimmer-components` optional feature flag to `false`",
+  "DEPRECATION: Invoking the `<LinkTo>` component with positional arguments is deprecated",
+];
 
 module.exports = function (defaults) {
   let discourseRoot = resolve("../../../..");
   let vendorJs = discourseRoot + "/vendor/assets/javascripts/";
+
+  // Silence the warnings listed in SILENCED_WARN_PREFIXES
+  const ui = defaults.project.ui;
+  const oldWriteWarning = ui.writeWarnLine.bind(ui);
+  ui.writeWarnLine = (message, ...args) => {
+    if (!SILENCED_WARN_PREFIXES.some((prefix) => message.startsWith(prefix))) {
+      return oldWriteWarning(message, ...args);
+    }
+  };
+
+  // Silence warnings which go straight to console.warn (e.g. template compiler deprecations)
+  /* eslint-disable no-console */
+  const oldConsoleWarn = console.warn.bind(console);
+  console.warn = (message, ...args) => {
+    if (!SILENCED_WARN_PREFIXES.some((prefix) => message.startsWith(prefix))) {
+      return oldConsoleWarn(message, ...args);
+    }
+  };
+  /* eslint-enable no-console */
+
+  const isProduction = EmberApp.env().includes("production");
+  const isTest = EmberApp.env().includes("test");
 
   let app = new EmberApp(defaults, {
     autoRun: false,
@@ -20,43 +49,116 @@ module.exports = function (defaults) {
       insertContentForTestBody: false,
     },
     sourcemaps: {
-      // There seems to be a bug with brocolli-concat when sourcemaps are disabled
+      // There seems to be a bug with broccoli-concat when sourcemaps are disabled
       // that causes the `app.import` statements below to fail in production mode.
       // This forces the use of `fast-sourcemap-concat` which works in production.
       enabled: true,
     },
     autoImport: {
       forbidEval: true,
+      insertScriptsAt: "ember-auto-import-scripts",
     },
+    fingerprint: {
+      // Handled by Rails asset pipeline
+      enabled: false,
+    },
+    SRI: {
+      // We don't use SRI in Rails. Disable here to match:
+      enabled: false,
+    },
+
+    "ember-cli-terser": {
+      enabled: isProduction,
+      exclude: [
+        "**/test-*.js",
+        "**/core-tests*.js",
+        "**/highlightjs/*",
+        "**/javascripts/*",
+      ],
+    },
+
+    // We need to build tests in prod for theme tests
+    tests: true,
   });
 
-  // Ember CLI does this by default for the app tree, but for our extra bundles we
-  // need to do it ourselves in production mode.
-  const isProduction = EmberApp.env().includes("production");
-  function digest(tree) {
-    return isProduction ? new AssetRev(tree) : tree;
-  }
+  // Patching a private method is not great, but there's no other way for us to tell
+  // Ember CLI that we want the tests alone in a package without helpers/fixtures, since
+  // we re-use those in the theme tests.
+  app._defaultPackager.packageApplicationTests = function (tree) {
+    let appTestTrees = []
+      .concat(
+        this.packageEmberCliInternalFiles(),
+        this.packageTestApplicationConfig(),
+        tree
+      )
+      .filter(Boolean);
+
+    appTestTrees = mergeTrees(appTestTrees, {
+      overwrite: true,
+      annotation: "TreeMerger (appTestTrees)",
+    });
+
+    let tests = concat(appTestTrees, {
+      inputFiles: ["**/tests/**/*-test.js"],
+      headerFiles: ["vendor/ember-cli/tests-prefix.js"],
+      footerFiles: ["vendor/ember-cli/app-config.js"],
+      outputFile: "/assets/core-tests.js",
+      annotation: "Concat: Core Tests",
+      sourceMapConfig: false,
+    });
+
+    let testHelpers = concat(appTestTrees, {
+      inputFiles: [
+        "**/tests/test-boot-ember-cli.js",
+        "**/tests/helpers/**/*.js",
+        "**/tests/fixtures/**/*.js",
+        "**/tests/setup-tests.js",
+      ],
+      outputFile: "/assets/test-helpers.js",
+      annotation: "Concat: Test Helpers",
+      sourceMapConfig: false,
+    });
+
+    if (isTest) {
+      return mergeTrees([
+        tests,
+        testHelpers,
+        discourseScss(`${discourseRoot}/app/assets/stylesheets`, "testem.scss"),
+      ]);
+    } else {
+      return mergeTrees([tests, testHelpers]);
+    }
+  };
 
   // WARNING: We should only import scripts here if they are not in NPM.
   // For example: our very specific version of bootstrap-modal.
   app.import(vendorJs + "bootbox.js");
-  app.import(vendorJs + "bootstrap-modal.js");
-  app.import(vendorJs + "jquery.ui.widget.js");
-  app.import(vendorJs + "jquery.fileupload.js");
-  app.import(vendorJs + "jquery.fileupload-process.js");
-  app.import(vendorJs + "jquery.autoellipsis-1.0.10.js");
+  app.import("node_modules/bootstrap/js/modal.js");
   app.import(vendorJs + "caret_position.js");
-  app.import(vendorJs + "show-html.js");
   app.import("node_modules/ember-source/dist/ember-template-compiler.js", {
     type: "test",
   });
+  app.import(discourseRoot + "/app/assets/javascripts/polyfills.js");
 
-  let adminVendor = funnel(vendorJs, {
-    files: ["resumable.js"],
-  });
+  app.import(
+    discourseRoot +
+      "/app/assets/javascripts/discourse/public/assets/scripts/module-shims.js"
+  );
+
+  let discoursePluginsTree;
+  if (process.env.EMBER_CLI_PLUGIN_ASSETS === "1") {
+    discoursePluginsTree = app.project
+      .findAddonByName("discourse-plugins")
+      .generatePluginsTree();
+  } else {
+    // Empty tree - no-op
+    discoursePluginsTree = mergeTrees([]);
+  }
+
+  const terserPlugin = app.project.findAddonByName("ember-cli-terser");
+  const applyTerser = (tree) => terserPlugin.postprocessTree("all", tree);
 
   return mergeTrees([
-    discourseScss(`${discourseRoot}/app/assets/stylesheets`, "testem.scss"),
     createI18nTree(discourseRoot, vendorJs),
     app.toTree(),
     funnel(`${discourseRoot}/public/javascripts`, { destDir: "javascripts" }),
@@ -64,18 +166,25 @@ module.exports = function (defaults) {
       files: ["highlight-test-bundle.min.js"],
       destDir: "assets/highlightjs",
     }),
-    digest(
-      concat(mergeTrees([app.options.adminTree, adminVendor]), {
+    applyTerser(
+      concat(mergeTrees([app.options.adminTree]), {
+        inputFiles: ["**/*.js"],
         outputFile: `assets/admin.js`,
       })
     ),
-    digest(prettyTextEngine(vendorJs, "discourse-markdown")),
-    digest(
-      concat("public/assets/scripts", {
-        outputFile: `assets/start-discourse.js`,
-        headerFiles: [`start-app.js`],
-        inputFiles: [`discourse-boot.js`],
+    applyTerser(
+      concat(mergeTrees([app.options.wizardTree]), {
+        inputFiles: ["**/*.js"],
+        outputFile: `assets/wizard.js`,
       })
     ),
+    prettyTextEngine(vendorJs, "discourse-markdown"),
+    concat("public/assets/scripts", {
+      outputFile: `assets/start-discourse.js`,
+      headerFiles: [`start-app.js`],
+      inputFiles: [`discourse-boot.js`],
+    }),
+    generateScriptsTree(app),
+    applyTerser(discoursePluginsTree),
   ]);
 };

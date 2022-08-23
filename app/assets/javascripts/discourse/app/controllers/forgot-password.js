@@ -15,7 +15,15 @@ export default Controller.extend(ModalFunctionality, {
 
   @discourseComputed("accountEmailOrUsername", "disabled")
   submitDisabled(accountEmailOrUsername, disabled) {
-    return isEmpty((accountEmailOrUsername || "").trim()) || disabled;
+    if (disabled) {
+      return true;
+    }
+
+    if (this.siteSettings.hide_email_address_taken) {
+      return !(accountEmailOrUsername || "").includes("@");
+    } else {
+      return isEmpty((accountEmailOrUsername || "").trim());
+    }
   },
 
   onShow() {

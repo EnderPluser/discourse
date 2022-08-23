@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe GroupUser do
+RSpec.describe GroupUser do
 
   it 'correctly sets notification level' do
     moderator = Fabricate(:moderator)
@@ -33,13 +31,13 @@ describe GroupUser do
   end
 
   describe "default category notifications" do
-    let(:group) { Fabricate(:group) }
-    let(:user) { Fabricate(:user) }
-    let(:category1) { Fabricate(:category) }
-    let(:category2) { Fabricate(:category) }
-    let(:category3) { Fabricate(:category) }
-    let(:category4) { Fabricate(:category) }
-    let(:category5) { Fabricate(:category) }
+    fab!(:group) { Fabricate(:group) }
+    fab!(:user) { Fabricate(:user) }
+    fab!(:category1) { Fabricate(:category) }
+    fab!(:category2) { Fabricate(:category) }
+    fab!(:category3) { Fabricate(:category) }
+    fab!(:category4) { Fabricate(:category) }
+    fab!(:category5) { Fabricate(:category) }
 
     def levels
       CategoryUser.notification_levels
@@ -98,14 +96,14 @@ describe GroupUser do
   end
 
   describe "default tag notifications" do
-    let(:group) { Fabricate(:group) }
-    let(:user) { Fabricate(:user) }
-    let(:tag1) { Fabricate(:tag) }
-    let(:tag2) { Fabricate(:tag) }
-    let(:tag3) { Fabricate(:tag) }
-    let(:tag4) { Fabricate(:tag) }
-    let(:tag5) { Fabricate(:tag) }
-    let(:synonym1) { Fabricate(:tag, target_tag: tag1) }
+    fab!(:group) { Fabricate(:group) }
+    fab!(:user) { Fabricate(:user) }
+    fab!(:tag1) { Fabricate(:tag) }
+    fab!(:tag2) { Fabricate(:tag) }
+    fab!(:tag3) { Fabricate(:tag) }
+    fab!(:tag4) { Fabricate(:tag) }
+    fab!(:tag5) { Fabricate(:tag) }
+    fab!(:synonym1) { Fabricate(:tag, target_tag: tag1) }
 
     def levels
       TagUser.notification_levels
@@ -228,8 +226,8 @@ describe GroupUser do
   describe '#destroy!' do
     fab!(:group) { Fabricate(:group) }
 
-    it "removes `primary_group_id` and exec `match_primary_group_changes` method on user model" do
-      user = Fabricate(:user, primary_group: group)
+    it "removes `primary_group_id`, `flair_group_id` and exec `match_primary_group_changes` method on user model" do
+      user = Fabricate(:user, primary_group: group, flair_group: group)
       group_user = Fabricate(:group_user, group: group, user: user)
 
       user.expects(:match_primary_group_changes).once
@@ -237,6 +235,7 @@ describe GroupUser do
 
       user.reload
       expect(user.primary_group_id).to be_nil
+      expect(user.flair_group_id).to be_nil
     end
   end
 end

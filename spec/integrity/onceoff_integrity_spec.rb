@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require "rails_helper"
-
-describe ::Jobs::Onceoff do
+RSpec.describe ::Jobs::Onceoff do
   it "can run all once off jobs without errors" do
     # Load all once offs
     Dir[Rails.root + 'app/jobs/onceoff/*.rb'].each do |f|

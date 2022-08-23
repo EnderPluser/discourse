@@ -11,7 +11,7 @@ end
 
 if Rails.env.development? && RUBY_VERSION.match?(/^2\.5\.[23]/)
   STDERR.puts "WARNING: Discourse development environment runs slower on Ruby 2.5.3 or below"
-  STDERR.puts "We recommend you upgrade to Ruby 2.6.1 for the optimal development performance"
+  STDERR.puts "We recommend you upgrade to the latest Ruby 2.x for the optimal development performance"
 
   # we have to used to older and slower version of the logger cause the new one exposes a Ruby bug in
   # the Queue class which causes segmentation faults
@@ -33,8 +33,12 @@ end
 
 if Rails.env.production?
   Logster.store.ignore = [
-    # honestly, Rails should not be logging this, its real noisy
+    # These errors are caused by client requests. No need to log them.
+    # Rails itself defines these as 'silent exceptions', but this does
+    # not entirely prevent them from being logged
+    # https://github.com/rails/rails/blob/f2caed1e/actionpack/lib/action_dispatch/middleware/exception_wrapper.rb#L39-L42
     /^ActionController::RoutingError \(No route matches/,
+    /^ActionDispatch::Http::MimeNegotiation::InvalidType/,
 
     /^PG::Error: ERROR:\s+duplicate key/,
 
@@ -73,14 +77,6 @@ if Rails.env.production?
     # we handle this cleanly in the message bus middleware
     # no point logging to logster
     /RateLimiter::LimitExceeded.*/m,
-
-    # see https://github.com/rails/rails/issues/34599
-    # Poll defines an enum with the value `open` ActiveRecord then attempts
-    # AR then warns cause #open is being redefined, it is already defined
-    # privately in Kernel per: http://ruby-doc.org/core-2.5.3/Kernel.html#method-i-open
-    # Once the rails issue is fixed we can stop this error suppression and stop defining
-    # scopes for the enums
-    /^Creating scope :open\. Overwriting existing method Poll\.open\./,
   ]
   Logster.config.env_expandable_keys.push(:hostname, :problem_db)
 end

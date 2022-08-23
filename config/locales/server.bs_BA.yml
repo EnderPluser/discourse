@@ -356,9 +356,6 @@ bs_BA:
       title: "Like"
       description: "Lajkuj ovaj post"
       short_description: "Lajkuj ovaj post"
-  user_activity:
-    no_bookmarks:
-      self: "Nemate zabilježene postove; zabilješke omogućuju brzo pozivanje na određene postove."
   topic_flag_types:
     spam:
       title: "Spam"
@@ -622,7 +619,6 @@ bs_BA:
     title: "Brief title of this site, used in the title tag."
     site_description: "Describe this site in one sentence, used in the meta description tag."
     crawl_images: "Retrieve images from remote URLs to insert the correct width and height dimensions."
-    download_remote_images_to_local: "Convert remote images to local images by downloading them; this prevents broken images."
     download_remote_images_threshold: "Minimum disk space necessary to download remote images locally (in percent)"
     disabled_image_download_domains: "Remote images will never be downloaded from these domains. Pipe-delimited list."
     editing_grace_period: "For (n) seconds after posting, editing will not create a new version in the post history."
@@ -638,8 +634,6 @@ bs_BA:
     email_custom_headers: "A pipe-delimited list of custom email headers"
     summary_score_threshold: "The minimum score required for a post to be included in 'Summarize This Topic'"
     summary_percent_filter: "When a user clicks 'Summarize This Topic', show the top % of posts"
-    enable_long_polling: "Message bus used for notification can use long polling"
-    long_polling_interval: "Interval before a new long poll is issued in milliseconds "
     polling_interval: "How often should logged in user clients poll in milliseconds"
     anon_polling_interval: "How often should anonymous clients poll in milliseconds"
     cooldown_minutes_after_hiding_posts: "Number of minutes a user must wait before they can edit a post hidden via community flagging"
@@ -943,6 +937,7 @@ bs_BA:
     post_approved:
       title: "Vaš post je odobren"
   page_not_found:
+    page_title: "Stranica nije pronađena"
     popular_topics: "Popularno"
     recent_topics: "Nove"
     see_more: "Više"
@@ -1052,25 +1047,12 @@ bs_BA:
       title: "Pošalji ponovo email aktivacije"
   wizard:
     step:
-      forum_title:
-        title: "Ime"
       privacy:
-        title: "Pristup"
         fields:
-          privacy:
-            choices:
-              open:
-                label: "Javno"
-              restricted:
-                label: "Privatno"
-      contact:
-        fields:
-          contact_email:
-            placeholder: "name@example.com"
-          contact_url:
-            placeholder: "https://www.example.com/contact-us"
-      corporate:
-        title: "Organizacija"
+          login_required:
+            placeholder: "Privatno"
+          must_approve_users:
+            placeholder: "Zahtjeva Dozvolu"
       styling:
         fields:
           styling_preview:
@@ -1085,6 +1067,10 @@ bs_BA:
                 label: "Kategorije i zadnje teme"
               categories_and_top_topics:
                 label: "Kategorije i top teme"
+      corporate:
+        fields:
+          contact_url:
+            placeholder: "https://www.example.com/contact-us"
   joined: "Registrovan"
   discourse_push_notifications:
     popup:

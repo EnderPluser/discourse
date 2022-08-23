@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe Jobs::CleanUpEmailLogs do
+RSpec.describe Jobs::CleanUpEmailLogs do
   fab!(:email_log) { Fabricate(:email_log, created_at: 2.years.ago) }
   fab!(:email_log2) { Fabricate(:email_log, created_at: 2.weeks.ago) }
   fab!(:email_log3) { Fabricate(:email_log, created_at: 2.days.ago) }

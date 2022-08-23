@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require_dependency 'distributed_cache'
-require_dependency 'stylesheet/compiler'
+require 'distributed_cache'
+require 'stylesheet/compiler'
 
 module Stylesheet; end
 
@@ -107,7 +107,7 @@ class Stylesheet::Manager
 
   def self.last_file_updated
     if Rails.env.production?
-      @last_file_updated ||= if File.exists?(MANIFEST_FULL_PATH)
+      @last_file_updated ||= if File.exist?(MANIFEST_FULL_PATH)
         File.readlines(MANIFEST_FULL_PATH, 'r')[0]
       else
         mtime = max_file_mtime
@@ -188,6 +188,14 @@ class Stylesheet::Manager
     stylesheet_details(target, "all")
   end
 
+  def stylesheet_preload_tag(target = :desktop, media = 'all')
+    stylesheets = stylesheet_details(target, media)
+    stylesheets.map do |stylesheet|
+      href = stylesheet[:new_href]
+      %[<link href="#{href}" rel="preload" as="style"/>]
+    end.join("\n").html_safe
+  end
+
   def stylesheet_link_tag(target = :desktop, media = 'all')
     stylesheets = stylesheet_details(target, media)
     stylesheets.map do |stylesheet|
@@ -195,7 +203,7 @@ class Stylesheet::Manager
       theme_id = stylesheet[:theme_id]
       data_theme_id = theme_id ? "data-theme-id=\"#{theme_id}\"" : ""
       theme_name = stylesheet[:theme_name]
-      data_theme_name = theme_name ? "data-theme-name=\"#{theme_name}\"" : ""
+      data_theme_name = theme_name ? "data-theme-name=\"#{CGI.escapeHTML(theme_name)}\"" : ""
       %[<link href="#{href}" media="#{media}" rel="stylesheet" data-target="#{target}" #{data_theme_id} #{data_theme_name}/>]
     end.join("\n").html_safe
   end
@@ -224,8 +232,8 @@ class Stylesheet::Manager
           builder = Builder.new(target: target, theme: theme, manager: self)
 
           next if builder.theme&.component && !scss_checker.has_scss(theme_id)
-          builder.compile unless File.exists?(builder.stylesheet_fullpath)
-          href = builder.stylesheet_path(current_hostname)
+          builder.compile unless File.exist?(builder.stylesheet_fullpath)
+          href = builder.stylesheet_absolute_url
 
           data[:new_href] = href
           stylesheets << data
@@ -242,8 +250,8 @@ class Stylesheet::Manager
         end
       else
         builder = Builder.new(target: target, manager: self)
-        builder.compile unless File.exists?(builder.stylesheet_fullpath)
-        href = builder.stylesheet_path(current_hostname)
+        builder.compile unless File.exist?(builder.stylesheet_fullpath)
+        href = builder.stylesheet_absolute_url
 
         data = { target: target, new_href: href }
         stylesheets << data
@@ -285,12 +293,22 @@ class Stylesheet::Manager
       manager: self
     )
 
-    builder.compile unless File.exists?(builder.stylesheet_fullpath)
+    builder.compile unless File.exist?(builder.stylesheet_fullpath)
 
-    href = builder.stylesheet_path(current_hostname)
+    href = builder.stylesheet_absolute_url
     stylesheet[:new_href] = href
     cache.defer_set(cache_key, stylesheet.freeze)
     stylesheet
+  end
+
+  def color_scheme_stylesheet_preload_tag(color_scheme_id = nil, media = 'all')
+    stylesheet = color_scheme_stylesheet_details(color_scheme_id, media)
+
+    return '' if !stylesheet
+
+    href = stylesheet[:new_href]
+
+    %[<link href="#{href}" rel="preload" as="style"/>].html_safe
   end
 
   def color_scheme_stylesheet_link_tag(color_scheme_id = nil, media = 'all')

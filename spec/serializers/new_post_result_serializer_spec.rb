@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
-
-describe NewPostResultSerializer do
+RSpec.describe NewPostResultSerializer do
 
   it "includes the message and route_to if present" do
     result = NewPostResult.new(:custom, true)

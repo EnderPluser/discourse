@@ -3,7 +3,7 @@ import {
   applyCachedInlineOnebox,
   deleteCachedInlineOnebox,
 } from "pretty-text/inline-oneboxer";
-import QUnit, { module, skip, test } from "qunit";
+import QUnit, { module, test } from "qunit";
 import Post from "discourse/models/post";
 import { buildQuote } from "discourse/lib/quote";
 import { deepMerge } from "discourse-common/lib/object";
@@ -22,6 +22,8 @@ const rawOpts = {
     default_code_lang: "auto",
     enable_markdown_linkify: true,
     markdown_linkify_tlds: "com",
+    display_name_on_posts: false,
+    prioritize_username_in_ux: true,
   },
   getURL: (url) => url,
 };
@@ -54,20 +56,6 @@ QUnit.assert.cookedPara = function (input, expected, message) {
 };
 
 module("Unit | Utility | pretty-text", function () {
-  skip("Pending Engine fixes and spec fixes", function (assert) {
-    assert.cooked(
-      "Derpy: http://derp.com?_test_=1",
-      '<p>Derpy: <a href=https://derp.com?_test_=1"http://derp.com?_test_=1">http://derp.com?_test_=1</a></p>',
-      "works with underscores in urls"
-    );
-
-    assert.cooked(
-      "**a*_b**",
-      "<p><strong>a*_b</strong></p>",
-      "allows for characters within bold"
-    );
-  });
-
   test("buildOptions", function (assert) {
     assert.ok(
       buildOptions({ siteSettings: { enable_emoji: true } }).discourse.features
@@ -889,7 +877,7 @@ eviltrout</p>
 
     assert.cooked(
       "    ```\n    hello\n    ```",
-      "<pre><code>```\nhello\n```</code></pre>",
+      "<pre><code>```\nhello\n```\n</code></pre>",
       "only detect ``` at the beginning of lines"
     );
 
@@ -907,8 +895,8 @@ eviltrout</p>
 
     assert.cooked(
       "```eviltrout\nhello\n```",
-      '<pre><code class="lang-auto">hello\n</code></pre>',
-      "it doesn't not allowlist all classes"
+      '<pre data-code-wrap="eviltrout"><code class="lang-nohighlight">hello\n</code></pre>',
+      "it converts to custom block unknown code names"
     );
 
     assert.cooked(
@@ -937,13 +925,13 @@ eviltrout</p>
 
     assert.cooked(
       "    <pre>test</pre>",
-      "<pre><code>&lt;pre&gt;test&lt;/pre&gt;</code></pre>",
+      "<pre><code>&lt;pre&gt;test&lt;/pre&gt;\n</code></pre>",
       "it does not parse other block types in markdown code blocks"
     );
 
     assert.cooked(
       "    [quote]test[/quote]",
-      "<pre><code>[quote]test[/quote]</code></pre>",
+      "<pre><code>[quote]test[/quote]\n</code></pre>",
       "it does not parse other block types in markdown code blocks"
     );
 
@@ -1001,8 +989,7 @@ eviltrout</p>
       let cache = {};
       cache["upload://o8iobpLcW3WSFvVH7YQmyGlKmGM.pdf"] = {
         short_url: "upload://o8iobpLcW3WSFvVH7YQmyGlKmGM.pdf",
-        url:
-          "/secure-media-uploads/original/3X/c/b/o8iobpLcW3WSFvVH7YQmyGlKmGM.pdf",
+        url: "/secure-media-uploads/original/3X/c/b/o8iobpLcW3WSFvVH7YQmyGlKmGM.pdf",
         short_path: "/uploads/short-url/blah",
       };
       return cache;
@@ -1023,8 +1010,7 @@ eviltrout</p>
       let cache = {};
       cache["upload://o8iobpLcW3WSFvVH7YQmyGlKmGM.pdf"] = {
         short_url: "upload://o8iobpLcW3WSFvVH7YQmyGlKmGM.pdf",
-        url:
-          "/secure-media-uploads/original/3X/c/b/o8iobpLcW3WSFvVH7YQmyGlKmGM.pdf",
+        url: "/secure-media-uploads/original/3X/c/b/o8iobpLcW3WSFvVH7YQmyGlKmGM.pdf",
         short_path: "/uploads/short-url/blah",
       };
       return cache;
@@ -1118,7 +1104,7 @@ eviltrout</p>
     assert.cookedOptions(
       "Pleased to meet you, but pleeeease call me later, xyz123",
       {
-        censoredRegexp: "(xyz*|plee+ase)",
+        censoredRegexp: [{ "(xyz*|plee+ase)": { case_sensitive: false } }],
       },
       "<p>Pleased to meet you, but ■■■■■■■■■ call me later, ■■■123</p>",
       "supports censoring"
@@ -1493,18 +1479,57 @@ var bar = 'bar';
     );
   });
 
+  test("customizing markdown-it rules", function (assert) {
+    assert.cookedOptions(
+      "**bold**",
+      { markdownItRules: [] },
+      "<p>**bold**</p>",
+      "does not apply bold markdown when rule is not enabled"
+    );
+
+    assert.cookedOptions(
+      "**bold**",
+      { markdownItRules: ["emphasis"] },
+      "<p><strong>bold</strong></p>",
+      "applies bold markdown when rule is enabled"
+    );
+  });
+
+  test("features override", function (assert) {
+    assert.cookedOptions(
+      ":grin: @sam",
+      { featuresOverride: [] },
+      "<p>:grin: @sam</p>",
+      "does not cook emojis when Discourse markdown engines are disabled"
+    );
+
+    assert.cookedOptions(
+      ":grin: @sam",
+      { featuresOverride: ["emoji"] },
+      `<p><img src="/images/emoji/google_classic/grin.png?v=${v}" title=":grin:" class="emoji" alt=":grin:" loading="lazy" width="20" height="20"> @sam</p>`,
+      "cooks emojis when only the emoji markdown engine is enabled"
+    );
+
+    assert.cookedOptions(
+      ":grin: @sam",
+      { featuresOverride: ["mentions", "text-post-process"] },
+      `<p>:grin: <span class="mention">@sam</span></p>`,
+      "cooks mentions when only the mentions markdown engine is enabled"
+    );
+  });
+
   test("emoji", function (assert) {
     assert.cooked(
       ":smile:",
-      `<p><img src="/images/emoji/google_classic/smile.png?v=${v}" title=":smile:" class="emoji only-emoji" alt=":smile:"></p>`
+      `<p><img src="/images/emoji/google_classic/smile.png?v=${v}" title=":smile:" class="emoji only-emoji" alt=":smile:" loading="lazy" width="20" height="20"></p>`
     );
     assert.cooked(
       ":(",
-      `<p><img src="/images/emoji/google_classic/frowning.png?v=${v}" title=":frowning:" class="emoji only-emoji" alt=":frowning:"></p>`
+      `<p><img src="/images/emoji/google_classic/frowning.png?v=${v}" title=":frowning:" class="emoji only-emoji" alt=":frowning:" loading="lazy" width="20" height="20"></p>`
     );
     assert.cooked(
       "8-)",
-      `<p><img src="/images/emoji/google_classic/sunglasses.png?v=${v}" title=":sunglasses:" class="emoji only-emoji" alt=":sunglasses:"></p>`
+      `<p><img src="/images/emoji/google_classic/sunglasses.png?v=${v}" title=":sunglasses:" class="emoji only-emoji" alt=":sunglasses:" loading="lazy" width="20" height="20"></p>`
     );
   });
 
@@ -1518,7 +1543,7 @@ var bar = 'bar';
     assert.cookedOptions(
       "test:smile:test",
       { siteSettings: { enable_inline_emoji_translation: true } },
-      `<p>test<img src="/images/emoji/google_classic/smile.png?v=${v}" title=":smile:" class="emoji" alt=":smile:">test</p>`
+      `<p>test<img src="/images/emoji/google_classic/smile.png?v=${v}" title=":smile:" class="emoji" alt=":smile:" loading="lazy" width="20" height="20">test</p>`
     );
   });
 
@@ -1526,7 +1551,7 @@ var bar = 'bar';
     assert.cookedOptions(
       ":smile:",
       { siteSettings: { emoji_set: "twitter" } },
-      `<p><img src="/images/emoji/twitter/smile.png?v=${v}" title=":smile:" class="emoji only-emoji" alt=":smile:"></p>`
+      `<p><img src="/images/emoji/twitter/smile.png?v=${v}" title=":smile:" class="emoji only-emoji" alt=":smile:" loading="lazy" width="20" height="20"></p>`
     );
   });
 
@@ -1539,7 +1564,7 @@ var bar = 'bar';
           external_emoji_url: "https://emoji.hosting.service",
         },
       },
-      `<p><img src="https://emoji.hosting.service/twitter/smile.png?v=${v}" title=":smile:" class="emoji only-emoji" alt=":smile:"></p>`
+      `<p><img src="https://emoji.hosting.service/twitter/smile.png?v=${v}" title=":smile:" class="emoji only-emoji" alt=":smile:" loading="lazy" width="20" height="20"></p>`
     );
   });
 
@@ -1549,7 +1574,7 @@ var bar = 'bar';
     assert.cookedOptions(
       ":foo:",
       {},
-      `<p><img src="/images/d-logo-sketch.png?v=${v}" title=":foo:" class="emoji emoji-custom only-emoji" alt=":foo:"></p>`
+      `<p><img src="/images/d-logo-sketch.png?v=${v}" title=":foo:" class="emoji emoji-custom only-emoji" alt=":foo:" loading="lazy" width="20" height="20"></p>`
     );
 
     registerEmoji("bar", "/images/avatar.png", "baz");
@@ -1557,7 +1582,7 @@ var bar = 'bar';
     assert.cookedOptions(
       ":bar:",
       {},
-      `<p><img src="/images/avatar.png?v=${v}" title=":bar:" class="emoji emoji-custom only-emoji" alt=":bar:"></p>`
+      `<p><img src="/images/avatar.png?v=${v}" title=":bar:" class="emoji emoji-custom only-emoji" alt=":bar:" loading="lazy" width="20" height="20"></p>`
     );
   });
 
@@ -1685,7 +1710,12 @@ var bar = 'bar';
 
   test("watched words replace", function (assert) {
     const opts = {
-      watchedWordsReplace: { "(?:\\W|^)(fun)(?=\\W|$)": "times" },
+      watchedWordsReplace: {
+        "(?:\\W|^)(fun)(?=\\W|$)": {
+          replacement: "times",
+          case_sensitive: false,
+        },
+      },
     };
 
     assert.cookedOptions("test fun funny", opts, "<p>test times funny</p>");
@@ -1694,7 +1724,12 @@ var bar = 'bar';
 
   test("watched words link", function (assert) {
     const opts = {
-      watchedWordsLink: { "(?:\\W|^)(fun)(?=\\W|$)": "https://discourse.org" },
+      watchedWordsLink: {
+        "(?:\\W|^)(fun)(?=\\W|$)": {
+          replacement: "https://discourse.org",
+          case_sensitive: false,
+        },
+      },
     };
 
     assert.cookedOptions(
@@ -1708,7 +1743,9 @@ var bar = 'bar';
     const maxMatches = 100; // same limit as MD watched-words-replace plugin
     const opts = {
       siteSettings: { watched_words_regular_expressions: true },
-      watchedWordsReplace: { "(\\bu?\\b)": "you" },
+      watchedWordsReplace: {
+        "(\\bu?\\b)": { replacement: "you", case_sensitive: false },
+      },
     };
 
     assert.cookedOptions(

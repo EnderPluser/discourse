@@ -2,8 +2,7 @@ import {
   acceptance,
   count,
   exists,
-  queryAll,
-  visible,
+  query,
 } from "discourse/tests/helpers/qunit-helpers";
 import { click, fillIn, visit } from "@ember/test-helpers";
 import { test } from "qunit";
@@ -26,7 +25,7 @@ acceptance("Search - Mobile", function (needs) {
     await click(".advanced-filters summary");
 
     assert.ok(
-      visible(".search-advanced-filters"),
+      exists(".advanced-filters[open]"),
       "it should expand advanced search filters"
     );
 
@@ -35,15 +34,15 @@ acceptance("Search - Mobile", function (needs) {
 
     assert.strictEqual(count(".fps-topic"), 1, "has one post");
 
-    assert.ok(
-      !visible(".search-advanced-filters"),
+    assert.notOk(
+      exists(".advanced-filters[open]"),
       "it should collapse advanced search filters"
     );
 
     await click("#search-button");
 
     assert.strictEqual(
-      queryAll("input.full-page-search").val(),
+      query("input.full-page-search").value,
       "discourse",
       "it does not reset input when hitting search icon again"
     );

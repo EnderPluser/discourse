@@ -1,19 +1,13 @@
 # frozen_string_literal: true
-# rubocop:disable Style/GlobalVars
 
 require 'cache'
 require 'open3'
-require_dependency 'plugin/instance'
-require_dependency 'version'
+require 'plugin/instance'
+require 'version'
 
 module Discourse
   DB_POST_MIGRATE_PATH ||= "db/post_migrate"
   REQUESTED_HOSTNAME ||= "REQUESTED_HOSTNAME"
-
-  require 'sidekiq/exception_handler'
-  class SidekiqExceptionHandler
-    extend Sidekiq::ExceptionHandler
-  end
 
   class Utils
     URI_REGEXP ||= URI.regexp(%w{http https})
@@ -159,6 +153,16 @@ module Discourse
     end
   end
 
+  def self.job_exception_stats
+    @job_exception_stats
+  end
+
+  def self.reset_job_exception_stats!
+    @job_exception_stats = Hash.new(0)
+  end
+
+  reset_job_exception_stats!
+
   # Log an exception.
   #
   # If your code is in a scheduled job, it is recommended to use the
@@ -169,7 +173,22 @@ module Discourse
     return if ex.class == Jobs::HandledExceptionWrapper
 
     context ||= {}
-    parent_logger ||= SidekiqExceptionHandler
+    parent_logger ||= Sidekiq
+
+    job = context[:job]
+
+    # mini_scheduler direct reporting
+    if Hash === job
+      job_class = job["class"]
+      if job_class
+        job_exception_stats[job_class] += 1
+      end
+    end
+
+    # internal reporting
+    if job.class == Class && ::Jobs::Base > job
+      job_exception_stats[job] += 1
+    end
 
     cm = RailsMultisite::ConnectionManagement
     parent_logger.handle_exception(ex, {
@@ -363,12 +382,17 @@ module Discourse
 
   def self.find_plugin_js_assets(args)
     plugins = self.find_plugins(args).select do |plugin|
-      plugin.js_asset_exists?
+      plugin.js_asset_exists? || plugin.extra_js_asset_exists?
     end
 
     plugins = apply_asset_filters(plugins, :js, args[:request])
 
-    plugins.map { |plugin| "plugins/#{plugin.directory_name}" }
+    plugins.flat_map do |plugin|
+      assets = []
+      assets << "plugins/#{plugin.directory_name}" if plugin.js_asset_exists?
+      assets << "plugins/#{plugin.directory_name}_extra" if plugin.extra_js_asset_exists?
+      assets
+    end
   end
 
   def self.assets_digest
@@ -505,6 +529,9 @@ module Discourse
   USER_READONLY_MODE_KEY     ||= 'readonly_mode:user'
   PG_FORCE_READONLY_MODE_KEY ||= 'readonly_mode:postgres_force'
 
+  # Psuedo readonly mode, where staff can still write
+  STAFF_WRITES_ONLY_MODE_KEY ||= 'readonly_mode:staff_writes_only'
+
   READONLY_KEYS ||= [
     READONLY_MODE_KEY,
     PG_READONLY_MODE_KEY,
@@ -517,7 +544,7 @@ module Discourse
       Sidekiq.pause!("pg_failover") if !Sidekiq.paused?
     end
 
-    if key == USER_READONLY_MODE_KEY || key == PG_FORCE_READONLY_MODE_KEY
+    if [USER_READONLY_MODE_KEY, PG_FORCE_READONLY_MODE_KEY, STAFF_WRITES_ONLY_MODE_KEY].include?(key)
       Discourse.redis.set(key, 1)
     else
       ttl =
@@ -595,6 +622,10 @@ module Discourse
     recently_readonly? || Discourse.redis.exists?(*keys)
   end
 
+  def self.staff_writes_only_mode?
+    Discourse.redis.get(STAFF_WRITES_ONLY_MODE_KEY).present?
+  end
+
   def self.pg_readonly_mode?
     Discourse.redis.get(PG_READONLY_MODE_KEY).present?
   end
@@ -653,36 +684,32 @@ module Discourse
   end
 
   def self.git_version
-    $git_version ||=
-      begin
-        git_cmd = 'git rev-parse HEAD'
-        self.try_git(git_cmd, Discourse::VERSION::STRING)
-      end # rubocop:disable Style/GlobalVars
+    @git_version ||= begin
+      git_cmd = 'git rev-parse HEAD'
+      self.try_git(git_cmd, Discourse::VERSION::STRING)
+    end
   end
 
   def self.git_branch
-    $git_branch ||=
-      begin
-        git_cmd = 'git rev-parse --abbrev-ref HEAD'
-        self.try_git(git_cmd, 'unknown')
-      end
+    @git_branch ||= begin
+      git_cmd = 'git rev-parse --abbrev-ref HEAD'
+      self.try_git(git_cmd, 'unknown')
+    end
   end
 
   def self.full_version
-    $full_version ||=
-      begin
-        git_cmd = 'git describe --dirty --match "v[0-9]*"'
-        self.try_git(git_cmd, 'unknown')
-      end
+    @full_version ||= begin
+      git_cmd = 'git describe --dirty --match "v[0-9]*" 2> /dev/null'
+      self.try_git(git_cmd, 'unknown')
+    end
   end
 
   def self.last_commit_date
-    $last_commit_date ||=
-      begin
-        git_cmd = 'git log -1 --format="%ct"'
-        seconds = self.try_git(git_cmd, nil)
-        seconds.nil? ? nil : DateTime.strptime(seconds, '%s')
-      end
+    @last_commit_date ||= begin
+      git_cmd = 'git log -1 --format="%ct"'
+      seconds = self.try_git(git_cmd, nil)
+      seconds.nil? ? nil : DateTime.strptime(seconds, '%s')
+    end
   end
 
   def self.try_git(git_cmd, default_value)
@@ -840,7 +867,7 @@ module Discourse
       # logster
       Rails.logger.add_with_opts(
         ::Logger::Severity::WARN,
-        "#{message} : #{e}",
+        "#{message} : #{e.class.name} : #{e}",
         "discourse-exception",
         backtrace: e.backtrace.join("\n"),
         env: env
@@ -876,7 +903,7 @@ module Discourse
     digest = Digest::MD5.hexdigest(warning)
     redis_key = "deprecate-notice-#{digest}"
 
-    if !Discourse.redis.without_namespace.get(redis_key)
+    if Rails.logger && !Discourse.redis.without_namespace.get(redis_key)
       Rails.logger.warn(warning)
       begin
         Discourse.redis.without_namespace.setex(redis_key, 3600, "x")
@@ -995,15 +1022,16 @@ module Discourse
       },
       Thread.new {
         SvgSprite.core_svgs
+      },
+      Thread.new {
+        EmberCli.script_chunks
       }
     ].each(&:join)
   ensure
     @preloaded_rails = true
   end
 
-  def self.redis
-    $redis
-  end
+  mattr_accessor :redis
 
   def self.is_parallel_test?
     ENV['RAILS_ENV'] == "test" && ENV['TEST_ENV_NUMBER']
@@ -1030,6 +1058,14 @@ module Discourse
   def self.allow_dev_populate?
     Rails.env.development? || ENV["ALLOW_DEV_POPULATE"] == "1"
   end
-end
 
-# rubocop:enable Style/GlobalVars
+  # warning: this method is very expensive and shouldn't be called in places
+  # where performance matters. it's meant to be called manually (e.g. in the
+  # rails console) when dealing with an emergency that requires invalidating
+  # theme cache
+  def self.clear_all_theme_cache!
+    ThemeField.force_recompilation!
+    Theme.all.each(&:update_javascript_cache!)
+    Theme.expire_site_cache!
+  end
+end

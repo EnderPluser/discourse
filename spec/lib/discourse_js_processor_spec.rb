@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
 require 'discourse_js_processor'
 
-describe DiscourseJsProcessor do
+RSpec.describe DiscourseJsProcessor do
 
   describe 'should_transpile?' do
     it "returns false for empty strings" do
